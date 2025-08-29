@@ -1,0 +1,16 @@
+# requirements.txt
+beautifulsoup4==4.13.4
+htmldocx==0.0.6
+google-genai==1.16.1
+lxml==6.0.0
+jdatetime==5.2.0
+Markdown==3.8.2
+markdown-it-py==3.0.0
+openai==1.81.0
+pydub==0.25.1
+python-dotenv==1.1.0
+python-telegram-bot==22.1
+pytz==2025.2
+SQLAlchemy==2.0.41
+Telethon==1.40.0
+youtube-transcript-api==1.1.1

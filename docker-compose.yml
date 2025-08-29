@@ -1,0 +1,24 @@
+# docker-compose.yml (Corrected)
+
+services:
+  sedanevistest_bot:
+    build: .
+    container_name: sedanevistest-bot
+    restart: unless-stopped
+    
+    env_file:
+      - .env
+      
+    volumes:
+      - bot_persistent_data:/home/appuser/app/persistent_data
+      - bot_downloads:/home/appuser/app/downloads      
+      
+    deploy:
+      resources:
+        limits:
+          memory: 8G
+
+# Define the single named volume we are now using.
+volumes:
+  bot_persistent_data:
+  bot_downloads:  

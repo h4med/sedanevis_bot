@@ -1,0 +1,235 @@
+# texts.py
+
+class Texts:
+    """
+    A central repository for all text strings used in the SedaNevis bot.
+    This makes management and future internationalization (i18n) easier.
+    """
+    class Keyboard:
+        """Labels for keyboard buttons."""
+        SUMMARY_SHORT = "📄 خلاصه خیلی کوتاه"
+        EXTRACT_POINTS = "💡استخراج نکات مهم"
+        EXTRACT_MINUTES = "📑 استخراج صورت جلسه"     
+
+        APPROVE_USER = "✅ Approve"
+        REJECT_USER = "❌ Reject"
+
+        LANG_FA = "🇮🇷 فارسی"
+        LANG_EN = "🇬🇧 English"
+
+    class User:
+        """Messages sent to regular users."""
+        NEW_USER_GREETING = (
+            "👋 سلام !\n\n"
+            "✨ به ربات صدانویس خوش آمدی. ✨\n\n"
+            "🎧 ما اینجا از قویترین و به‌روزترین موتورهای هوش‌مصنوعی برای تبدیل صوت به متن و پردازش محتوا استفاده می‌کنیم.\n\n"
+            "📝 اینجا می‌تونی هر فایل صوتی، تصویری یا Voice به متن تبدیل کنی.\n\n"
+            "درخواست شما برای استفاده از این ربات ثبت شد.\n\n"
+            "لطفاً تا زمان تایید توسط ادمین شکیبا باشید.\n\n"
+            "@SedaNevis_Bot"
+        )        
+        PENDING_STATUS = "⏳ درخواست شما هنوز در انتظار تایید توسط ادمین است.\n\n@SedaNevis_bot"
+        REJECTED_STATUS = "⛔ شما مجاز به استفاده از این ربات نیستید.\n\n@SedaNevis_bot"
+
+        START_APPROVED = (
+            "👋 سلام {first_name} عزیز!\n\n"
+            "✨به ربات صدانویس خوش آمدی.✨\n"
+            "🎧اینجا می‌تونی هر فایل صوتی، تصویری و Voice  رو به متن تبدیل کنی.\n\n"
+            "📝بعد از دریافت متن، می‌تونی اون رو خلاصه کنی، نکات اصلیش رو دربیاری یا به صورت‌جلسه تبدیلش کنی.\n\n"
+            "🚀کافیه فایلت رو بفرستی یا از جای دیگه فوروارد کنی!\n\n"
+            "@SedaNevis_Bot"
+        )           
+        TEXT_RECEIVED = "متن دریافت شد. چه کاری روی آن انجام دهم؟\n\n@SedaNevis_bot"
+        TEXT_FILE_PROMPT = "فایل متنی خوانده شد. چه کاری روی آن انجام دهم؟\n\n@SedaNevis_bot"
+        
+        CREDIT_INSUFFICIENT = (
+            "⛔ اعتبار شما کافی نیست.\n"
+            "اعتبار فعلی: {current_credit:.1f} دقیقه\n"
+            "هزینه این عملیات: {cost:.1f} دقیقه\n\n"
+            "@SedaNevis_bot\n"
+        )
+
+        MEDIA_DOWNLOAD_START = "فایل دریافت شد! در حال دانلود و پردازش اولیه هستیم.\n\nاز شکیبایی شما سپاس‌گذاریم 🙏\n\n@SedaNevis_bot\n"
+        MEDIA_DOWNLOAD_DONE = "فایل دانلود شد. در حال پردازش و استخراج صدا..."
+        MEDIA_PROCESSING_DONE = (
+            "پردازش اولیه تمام شد.\n"
+            "طول فایل: {duration}\n\n"
+            "در حال ارسال به سرویس رونویسی...\n"
+            "(با توجه به طول فایل، ممکن است رونویسی تا چند دقیقه طول بکشد.)\n\n"
+            "@SedaNevis_bot\n"
+        )
+        TRANSCRIPTION_IN_PROGRESS = (
+            "🎤 در حال رونویسی هستیم.\n"
+            "با توجه به طول فایل، ممکن است رونویسی تا چند دقیقه طول بکشد...\n\n"
+            "از شکیبایی شما همچنان سپاس‌گذاریم 🙏\n\n"
+            "⏳ پیشرفت: {progress}%\n\n"
+            "@SedaNevis_bot\n"
+        )
+        TRANSCRIPTION_SUCCESS = "رونویسی با موفقیت انجام شد! ✅"
+        TRANSCRIPTION_CAPTION = ( 
+            "**رونوشت کامل فایل:**\n"
+            "مدت زمان مصرف شده: {cost:.1f} دقیقه\n"
+            "اعتبار باقی‌مانده: {remaining_credit:.1f} دقیقه\n\n"
+            "چه کاری روی این متن انجام دهم؟\n@SedaNevis_bot\n"
+        )
+        
+        PROCESSING_ACTION = "در حال اجرای «{action_text}»..."
+        NO_RESPONSE_FROM_AI = "پاسخی دریافت نشد."
+        
+        ACTION_RESULT_HEADER = "<b>نتیجه برای «{action_text}»</b>"
+
+        ACTION_RESULT_FOOTER = (
+            "\n\n—————————————\n" #
+            "هزینه عملیات: {cost:.1f} دقیقه\n"
+            "<b>اعتبار باقی‌مانده: {remaining_credit:.1f} دقیقه</b>\n"
+            "@SedaNevis_bot"
+        )
+
+        ACTION_RESULT_LONG_FILE_CAPTION = (
+            "نتیجه درخواست شما به دلیل طولانی بودن در فایل ضمیمه شده است."
+        )
+
+        APPROVAL_SUCCESS = (
+            "حساب شما تایید شد! شما اکنون می‌توانید از ربات استفاده کنید. \n"
+            "برای شروع، یک فایل صوتی یا متن ارسال کنید.\n"
+            "@SedaNevis_bot"
+        )
+        APPROVAL_REJECTED = "متاسفانه درخواست شما برای استفاده از ربات رد شد."
+
+        CREDIT_STATUS = (
+            "📊 <b>وضعیت اعتبار شما</b>\n\n"
+            "⏳ <b>اعتبار باقیمانده:</b> {credit:.1f} دقیقه\n\n"
+            "برای شارژ اعتبار، لطفا با ادمین در ارتباط باشید: @sedanevis_admin\n\n@SedaNevis_Bot"
+        )
+
+        SETTINGS_PROMPT = (
+            "⚙️ <b>تنظیمات</b>\n\n"
+            "زبان ترجیحی فعلی شما برای پردازش: <b>{current_lang}</b>\n\n"
+            "لطفا زبان جدید را انتخاب کنید:"
+        )
+        
+        LANG_UPDATED_SUCCESS = (
+            "⚙️ <b>تنظیمات</b>\n\n"
+            "✅ زبان با موفقیت به <b>{new_lang}</b> تغییر یافت."
+        )
+        LANG_FA_NAME = "فارسی (fa)"
+        LANG_EN_NAME = "English (en)"
+
+        YOUTUBE_LOOKING_UP = "در حال بررسی لینک یوتیوب..."
+        YOUTUBE_CHOOSE_TRANSCRIPT = (
+            "<b>{title}</b>\n"
+            "<i>مدت زمان: {duration}</i>\n\n"
+            "لطفا زبان رونوشت مورد نظر خود را انتخاب کنید:"
+        )
+        TRANSCRIPTION_LONG_FILE_CAPTION = (
+            "<b>رونوشت کامل در فایل ضمیمه شده است.</b>\n"
+            "متن به دلیل طولانی بودن در قالب فایل ارسال شد.\n\n"
+            "بخشی از متن:\n"
+            "<code>{preview_text}...</code>\n\n"
+            "{usage_info}"
+            "چه کاری روی این متن انجام دهم؟\n@SedaNevis_bot"
+        )
+
+    class Admin:
+        """Messages sent to the admin or related to admin actions."""
+        ONLY_ADMIN_COMMAND = "⛔ This command is for admins only."
+        NEW_USER_NOTIFICATION = (
+            "👤 **New User Request**\n\n"
+            "**Name:** {first_name}\n"
+            "**Username:** @{username}\n"
+            "**Telegram ID:** `{user_id}`\n"
+            "**Language:** {lang_code}"
+        )
+        USER_APPROVED_NOTIFICATION = ( # Updated
+            "✅ User <b>{first_name}</b> (<code>{user_id}</code>) has been <b>approved</b>.\n"
+            "They have been granted {credit} minutes of credit."
+        )
+
+        USER_REJECTED_NOTIFICATION = "❌ User <b>{first_name}</b> (<code>{user_id}</code>) has been <b>rejected</b>."
+
+        HELP_TEXT = (
+            "<b>Admin Commands</b>\n\n"
+            "<code>/list_users</code>\nShow a list of all users.\n\n"
+            "<code>/user_info &lt;user_id&gt;</code>\nGet detailed info for a single user.\n\n"
+            "<code>/add_credit &lt;user_id&gt; &lt;minutes&gt;</code>\nAdd credit to a user.\n\n"
+            "<code>/set_status &lt;user_id&gt; &lt;status&gt;</code>\nChange a user's status (e.g., approved, banned).\n\n"
+            "<code>/user_logs &lt;user_id&gt;</code>\nShow recent activity for a user."            
+        )
+        
+        LIST_USERS_HEADER = "<b>👥 User List</b>\n\n"
+        LIST_USERS_ITEM = ( # Updated
+            "<b>{first_name}</b> (<code>{user_id}</code>)\n"
+            "Status: <code>{status}</code> | Credit: {credit:.2f} min\n"
+            "--------------------\n"
+        )
+        
+        USER_INFO_HEADER = "<b>👤 User Info: {first_name}</b>\n\n"
+        USER_INFO_BODY = ( # Updated
+            "<b>Telegram ID:</b> <code>{user_id}</code>\n"
+            "<b>Username:</b> @{username}\n"
+            "<b>Status:</b> <code>{status}</code>\n"
+            "<b>Credit:</b> {credit:.2f} minutes\n"
+            "<b>Preferred Lang:</b> {lang}\n"
+            "<b>Joined:</b> {joined_date}"
+        )
+
+        ADD_CREDIT_SUCCESS = ( # Updated
+            "✅ Credit added successfully to <b>{first_name}</b>.\n\n"
+            "Added: {minutes_added:.2f} minutes.\n"
+            "New Balance: {new_credit:.2f} minutes."
+        )
+
+        USER_LOGS_HEADER = "<b>📜 Activity Logs for {first_name} ({user_id})</b>\n(Showing last 20 entries)\n\n"
+        USER_LOGS_ITEM = "<code>{timestamp}</code>\n<b>Action:</b> {action}\n<b>Change:</b> {change:.2f} min | <b>Details:</b> {details}\n--------------------\n"
+        NO_LOGS_FOUND = "No activity logs found for user <code>{user_id}</code>."
+
+        SET_STATUS_SUCCESS = "✅ Status for <b>{first_name}</b> (<code>{user_id}</code>) has been updated to <code>{new_status}</code>."
+
+    class Errors:
+        """Error messages shown to users or admins."""
+        GENERIC_UNEXPECTED = "در پردازش درخواست شما خطای غیرمنتظره‌ای رخ داد: {error}"
+        GENERIC_UNEXPECTED_ADMIN = "An unexpected error occurred: {error}"
+        
+        INVALID_CALLBACK_DATA = "Error: Invalid callback data."
+        INVALID_LANG_CALLBACK = "Error: Invalid language callback."
+        USER_NOT_FOUND_IN_DB_ADMIN = "Error: User with ID {user_id} not found in database."
+        USER_PROFILE_NOT_FOUND = "Error: Could not find your user profile."
+
+        INVALID_TEXT_FILE = "لطفا فقط فایل متنی (مانند .txt) ارسال کنید."
+        TEXT_FILE_PROCESS_FAILED = "خطا در پردازش فایل: {error}"
+        AUDIO_TRANSCRIPTION_FAILED = "رونویسی با خطا مواجه شد: {error}"
+        TEXT_PROCESS_FAILED = "پردازش متن با خطا مواجه شد: {error}"
+        VIDEO_TOO_LONG = "⛔ فایل ارسال شده طولانی‌تر از حد مجاز (۱۸۰ دقیقه) است."
+        
+        TEXT_NOT_FOUND = "خطا: متن اصلی یافت نشد. لطفاً دوباره متن یا فایل را ارسال کنید."
+        ACTION_UNDEFINED = "خطا: فرمان '{action}' تعریف نشده است."
+        OUTPUT_TOO_LONG = "Output too long to send as a single message."
+        
+        INVALID_USER_ID = "Invalid User ID. It must be a number."
+        INVALID_ARGS_ADD_CREDIT = "Invalid arguments. User ID, minutes, and tokens must be numbers."
+        
+        USAGE_USER_INFO = "Usage: <code>/user_info &lt;user_id&gt;</code>"
+        USAGE_ADD_CREDIT = "Usage: <code>/add_credit &lt;user_id&gt; &lt;minutes&gt;</code>"
+        USAGE_USER_LOGS = "Usage: <code>/user_logs &lt;user_id&gt;</code>" # New
+        USAGE_SET_STATUS = (
+            "Usage: <code>/set_status &lt;user_id&gt; &lt;status&gt;</code>\n"
+            "Valid statuses are: {valid_statuses}"
+        )
+        
+        EXCEPTION_REPORT_HEADER = "An exception was raised while handling an update\n"
+        YOUTUBE_INVALID_URL = "لینک یوتیوب نامعتبر است. لطفا یک لینک معتبر ارسال کنید."
+        YOUTUBE_TRANSCRIPTS_DISABLED = "متاسفانه صاحب این ویدیو امکان دسترسی به رونوشت را غیرفعال کرده است."
+        YOUTUBE_NO_TRANSCRIPTS = "متاسفانه هیچ رونوشتی (دستی یا خودکار) برای این ویدیو یافت نشد."
+        YOUTUBE_FETCH_ERROR = "خطایی در دریافت اطلاعات از یوتیوب رخ داد: {error}"
+        
+    class BotCommands:
+        """Descriptions for Bot Commands shown in Telegram."""
+        START = "شروع مجدد ربات | Restart the Bot"
+        CREDIT = "مشاهده اعتبار باقی‌مانده | Check Credit"
+        SETTINGS = "تنظیمات زبان | Language Settings"
+        ADMIN_HELP = "Show all admin commands"
+        LIST_USERS = "List all users"
+        USER_INFO = "Get info for a user"
+        ADD_CREDIT = "Add credit to a user"
+        SET_STATUS = "Set a user's status"
+        USER_LOGS = "Get activity logs for a user" # New

@@ -1,0 +1,11 @@
+# .gitignore
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+
+.env
+prompts.py
+
