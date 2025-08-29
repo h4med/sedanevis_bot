@@ -48,13 +48,14 @@ from utils import (
 admin_user_id = config.ADMIN_USER_ID
 
 async def privacy(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handles the /privacy command for users."""
+    """Handles the /privacy command."""
     user = update.effective_user
     await update.message.reply_text(
-        Texts.User.PRIVACY.format(first_name=user.first_name),
-        parse_mode='Markdown',
-        disable_web_page_preview=True 
-    )
+        text=Texts.User.PRIVACY.format(first_name=user.first_name),
+        # You can use the string 'Markdown' or the constant for clarity
+        parse_mode=ParseMode.MARKDOWN, 
+        disable_web_page_preview=True
+    )    
 
 @check_user_status
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
