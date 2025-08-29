@@ -105,7 +105,7 @@ def main() -> None:
         handle_youtube_url
     ))
 
-    # application.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_text_input))
+
     application.add_handler(MessageHandler(
         (filters.TEXT | filters.Document.MimeType("application/vnd.openxmlformats-officedocument.wordprocessingml.document")) & 
         (~filters.COMMAND), 

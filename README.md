@@ -3,8 +3,8 @@
 Transcribes audio files and deliver transcription also options for some text processing actions.
 
 ## Features
-- Feature 1
-- Feature 2
+- Audio Transcription
+- Text Processing
 
 ## Requirements
 - Python 3.x
