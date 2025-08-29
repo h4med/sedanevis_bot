@@ -47,6 +47,15 @@ from utils import (
 
 admin_user_id = config.ADMIN_USER_ID
 
+async def privacy(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handles the /privacy command for users."""
+    user = update.effective_user
+    await update.message.reply_text(
+        Texts.User.PRIVACY.format(first_name=user.first_name),
+        parse_mode='Markdown',
+        disable_web_page_preview=True 
+    )
+
 @check_user_status
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handles the /start command for approved users."""
@@ -184,9 +193,11 @@ async def handle_media_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     try:
         logging.info(f"Downloading file. Size: {file_object.file_size} bytes.")
+
         if file_object.file_size > config.TELEGRAM_MAX_BOT_API_FILE_SIZE:
             logging.info("File is larger than 20MB, using Telethon for download.")
             client = await ensure_telethon_client()
+            logging.info(f"Starting download using file_id: {file_object.file_id}")
             # Telethon can get the message by its ID and download the media within it
             telethon_message = await client.get_messages(entity=message.chat_id, ids=message.message_id)
             if not telethon_message or not (telethon_message.audio or telethon_message.voice or telethon_message.video or telethon_message.document):

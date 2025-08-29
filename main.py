@@ -12,6 +12,7 @@ from telegram.ext import (
 from config import TG_BOT_TOKEN, configure_logging, ADMIN_USER_ID 
 from handlers import (
     start,
+    privacy,
     handle_media_file, 
     button_callback_handler,
     handle_text_file,
@@ -40,6 +41,7 @@ async def post_init(application: Application):
     # Define commands for regular users using the Texts class
     user_commands = [
         BotCommand("/start", Texts.BotCommands.START),
+        BotCommand("/privacy", Texts.BotCommands.PRIVACY),
         BotCommand("/credit", Texts.BotCommands.CREDIT),
         BotCommand("/settings", Texts.BotCommands.SETTINGS),
     ]
@@ -84,6 +86,7 @@ def main() -> None:
 
     # User Command handlers
     application.add_handler(CommandHandler('start', start))
+    application.add_handler(CommandHandler('privacy', privacy))
     application.add_handler(CommandHandler('credit', credit_command_handler))
     application.add_handler(CommandHandler('settings', settings_command_handler))
     
