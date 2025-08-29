@@ -12,10 +12,10 @@ Transcribes audio files and deliver transcription also options for some text pro
 
 ## Installation
 ```bash
-pip install -r requirements.txt
+docker compose build
 ```
 
 ## Usage
 ```bash
-python your_bot.py
+docker compose up -d && docker compose logs -f
 ```
