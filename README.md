@@ -12,7 +12,7 @@ Transcribes audio files and deliver transcription also options for some text pro
 - API Kyes
 
 ## Installation
-rename `.env.example` to `.env` and then and add your API keys do the same for `prompts.example.py`, edit `prompts.py` to add needed prompts for transcription and other actions, Then
+rename `.env.example` to `.env` then add your API keys, do the same for `prompts.example.py`, edit `prompts.py` to add needed prompts for transcription and other actions, Then
 
 ```bash
 docker compose build
