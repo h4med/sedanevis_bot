@@ -9,7 +9,7 @@ Transcribes audio files and deliver transcription also options for some text pro
 ## Requirements
 - Python 3.x
 - Docker
-- API Kyes
+- API Kyes (for Telegram and Gemini)
 
 ## Installation
 rename `.env.example` to `.env` then add your API keys, do the same for `prompts.example.py`, edit `prompts.py` to add needed prompts for transcription and other actions, Then
