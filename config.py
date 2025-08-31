@@ -30,7 +30,6 @@ def configure_logging():
         level=logging.INFO,
         format='%(asctime)s - %(levelname)s - %(message)s - [%(filename)s:%(lineno)d]'
     )
-    # Silence overly verbose libraries
     logging.getLogger('telegram').setLevel(logging.WARNING)
     logging.getLogger('httpx').setLevel(logging.WARNING)
 
@@ -45,5 +44,3 @@ MAX_AUDIO_DURATION_SECONDS = int(os.getenv('MAX_AUDIO_DURATION_SECONDS', 10800))
 TRANSCRIPTION_EXECUTOR = ThreadPoolExecutor(max_workers=2000, thread_name_prefix="transcription_worker")
 TOKEN_COUNTING_EXECUTOR = ThreadPoolExecutor(max_workers=100, thread_name_prefix="token_counter")
 TEXT_PROCESS_EXECUTOR = ThreadPoolExecutor(max_workers=500, thread_name_prefix="text_processor")
-
-# CHUNK_LEN = int(os.getenv('CHUNK_LEN', '90'))  # Default 90 minutes per chunk

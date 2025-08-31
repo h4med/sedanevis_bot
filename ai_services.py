@@ -2,9 +2,6 @@
 import logging
 import time
 from google.genai import types
-# from google.genai.types import GenerateContentConfig, ThinkingConfig
-# from pydantic import BaseModel, Field
-
 
 # Import the initialized client from our config file
 from config import google_client

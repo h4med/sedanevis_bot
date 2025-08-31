@@ -28,7 +28,6 @@ from telegram import (
 from telegram.ext import ContextTypes
 from telegram.constants import ParseMode
 
-
 # Import from our modules
 import config
 from ai_services import (
@@ -52,7 +51,6 @@ async def privacy(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     await update.message.reply_text(
         text=Texts.User.PRIVACY.format(first_name=user.first_name),
-        # You can use the string 'Markdown' or the constant for clarity
         parse_mode=ParseMode.MARKDOWN, 
         disable_web_page_preview=True
     )    
@@ -68,17 +66,16 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 @check_user_status
 async def handle_text_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handles direct text messages from approved users."""
-    if update.message.text:  # Regular text message
+    if update.message.text:  #
         text = update.message.text
-    elif update.message.document:  # DOCX file
+    elif update.message.document:  
         text = await extract_text_from_docx(update, context)
         if text is None:
-            return  # Error occurred, message already sent to user
+            return  #
     else:
         await update.message.reply_text("Unsupported message type.")
         return
         
-    # text = update.message.text
     logging.info(f"Received text input from user {update.effective_user.id}. Length: {len(text)} chars.")
     context.user_data['last_text'] = text
 
@@ -137,7 +134,6 @@ async def handle_text_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         await status_message.edit_text(
             Texts.User.TEXT_FILE_PROMPT,
-            # reply_markup=get_action_keyboard()
             reply_markup=get_action_keyboard(
                 action1_estimated_minutes,
                 action2_estimated_minutes,
@@ -320,14 +316,12 @@ async def button_callback_handler(update: Update, context: ContextTypes.DEFAULT_
             return
 
         action = query.data
-        # prompt_template = Texts.Prompts.GEMINI_PROMPT_MAPPING.get(action)
         prompt_template = ACTIONS_PROMPT_MAPPING.get(action)
         if not prompt_template:
             await processing_message.edit_text(text=Texts.Errors.ACTION_UNDEFINED.format(action=action))
             return
         
         full_prompt = prompt_template.format(text=text_to_process)
-        # estimated_tokens = await count_text_tokens(full_prompt)
 
         loop = asyncio.get_event_loop()
         estimated_tokens = await loop.run_in_executor(
@@ -352,7 +346,6 @@ async def button_callback_handler(update: Update, context: ContextTypes.DEFAULT_
             full_prompt,
             "gemini-2.5-flash-lite"  # or your preferred model
         )
-
         
         if result_dict.get("error"):
             await processing_message.edit_text(Texts.Errors.TEXT_PROCESS_FAILED.format(error=result_dict['error']))
@@ -393,7 +386,6 @@ async def button_callback_handler(update: Update, context: ContextTypes.DEFAULT_
 
             try:
                 document_buffer = create_word_document(formatted_result_html, user_lang )
-                # document_buffer = create_word_document(result_text_md, user_lang )
                 file_caption = f"{header}\n\n{Texts.User.ACTION_RESULT_LONG_FILE_CAPTION}{footer}"
                 tehran_tz = pytz.timezone('Asia/Tehran')
                 current_report_time = jdatetime.datetime.now(tehran_tz).strftime("%Y%m%d-%H%M%S")
@@ -417,9 +409,6 @@ async def button_callback_handler(update: Update, context: ContextTypes.DEFAULT_
     finally:
         db.close()
 
-
-
-# Handler for Admin Approval Callbacks 
 async def approval_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handles the 'approve' and 'reject' callbacks from the admin."""
     query = update.callback_query
@@ -427,7 +416,6 @@ async def approval_callback_handler(update: Update, context: ContextTypes.DEFAUL
 
     admin_user = update.effective_user
     if admin_user.id != config.ADMIN_USER_ID:
-        # It's better practice to just return if a non-admin somehow triggers this
         logging.warning(f"Non-admin user {admin_user.id} tried to use an approval callback.")
         return
 
@@ -442,20 +430,16 @@ async def approval_callback_handler(update: Update, context: ContextTypes.DEFAUL
     try:
         target_user = db.query(User).filter(User.user_id == target_user_id).first()
         if not target_user:
-            # await query.edit_message_text(f"Error: User with ID {target_user_id} not found in database.")
             await query.edit_message_text(Texts.Errors.USER_NOT_FOUND_IN_DB_ADMIN.format(user_id=target_user_id))            
             return
 
-        # --- Use html.escape on any user-provided text ---
         safe_first_name = html.escape(target_user.first_name)
 
         if action == 'approve':
             target_user.status = 'approved'
-            # target_user.audio_minutes_credit = config.DEFAULT_AUDIO_MINUTES_CREDIT
-            # target_user.text_tokens_credit = config.DEFAULT_TEXT_TOKENS_CREDIT
-            target_user.credit_minutes = config.DEFAULT_CREDIT_MINUTES # <-- UPDATED            
+            target_user.credit_minutes = config.DEFAULT_CREDIT_MINUTES           
             db.commit()
-            # Log the initial credit grant
+
             log_activity(
                 db=db,
                 user_id=target_user_id,
@@ -467,9 +451,7 @@ async def approval_callback_handler(update: Update, context: ContextTypes.DEFAUL
                 Texts.Admin.USER_APPROVED_NOTIFICATION.format(
                     first_name=safe_first_name,
                     user_id=target_user.user_id,
-                    # audio_credit=config.DEFAULT_AUDIO_MINUTES_CREDIT,
-                    # text_credit=config.DEFAULT_TEXT_TOKENS_CREDIT
-                    credit=config.DEFAULT_CREDIT_MINUTES # <-- UPDATED                    
+                    credit=config.DEFAULT_CREDIT_MINUTES                  
                 ),
                 parse_mode=ParseMode.HTML
             )            
@@ -498,11 +480,9 @@ async def approval_callback_handler(update: Update, context: ContextTypes.DEFAUL
     except Exception as e:
         logging.error(f"Error in approval_callback_handler: {e}", exc_info=True)
         try:
-            # Try to inform the admin that something went wrong
-            # await query.edit_message_text(f"An error occurred while processing the request: {e}")
             await query.edit_message_text(Texts.Errors.GENERIC_UNEXPECTED_ADMIN.format(error=e))            
         except:
-            pass # If editing the message fails, just log it.
+            pass 
     finally:
         db.close()
 
@@ -512,7 +492,6 @@ async def credit_command_handler(update: Update, context: ContextTypes.DEFAULT_T
     """
     Handles the /credit command, showing the user their remaining credits.
     """
-    # The decorator ensures the user is approved and loads them into context.
     db_user: User = context.user_data['db_user']
     
     reply_text = Texts.User.CREDIT_STATUS.format(credit=db_user.credit_minutes)   
@@ -660,7 +639,7 @@ async def list_users_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
             message_parts.append(user_line)
             
         full_message = "".join(message_parts)
-        # Handle long lists by splitting the message
+
         limit = 4096
         for i in range(0, len(full_message), limit):
             chunk = full_message[i:i + limit]
@@ -691,7 +670,7 @@ async def user_info_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
             
         info_header = Texts.Admin.USER_INFO_HEADER.format(first_name=html.escape(user.first_name))
-        info_body = Texts.Admin.USER_INFO_BODY.format( # Uses updated text
+        info_body = Texts.Admin.USER_INFO_BODY.format( 
             user_id=user.user_id,
             username=user.username or 'N/A',
             status=user.status,
@@ -738,7 +717,7 @@ async def add_credit_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
             details=f"Added by admin {update.effective_user.id}"
         )
 
-        confirmation_text = Texts.Admin.ADD_CREDIT_SUCCESS.format( # Uses updated text
+        confirmation_text = Texts.Admin.ADD_CREDIT_SUCCESS.format( 
             first_name=html.escape(user.first_name),
             minutes_added=minutes_to_add,
             new_credit=user.credit_minutes
@@ -853,9 +832,9 @@ def get_yt_video_id(url: str) -> str | None:
         return url.split("watch?v=")[1].split("&")[0]
     elif "youtu.be/" in url:
         return url.split("youtu.be/")[1].split("?")[0]
-    elif "/live/" in url: # <-- ADDED THIS FOR LIVE VIDEOS
+    elif "/live/" in url:
         return url.split("/live/")[1].split("?")[0]
-    elif "/shorts/" in url: # <-- ADDED THIS FOR SHORTS (recommended)
+    elif "/shorts/" in url: 
         return url.split("/shorts/")[1].split("?")[0]
     return None
 
@@ -867,14 +846,12 @@ async def handle_youtube_url(update: Update, context: ContextTypes.DEFAULT_TYPE)
     message = update.message
     url_entities = [entity for entity in message.entities if entity.type == 'url']
     if not url_entities:
-        return # Should not happen with the filter, but good practice
+        return 
 
     url = message.text[url_entities[0].offset : url_entities[0].offset + url_entities[0].length]
 
-    # Check if it's a youtube link
     video_id = get_yt_video_id(url)
     if not video_id:
-        # It was a URL, but not one we recognize as YouTube. Silently ignore.
         logging.info(f"Ignoring non-YouTube URL: {url}")
         return
 
@@ -900,7 +877,7 @@ async def handle_youtube_url(update: Update, context: ContextTypes.DEFAULT_TYPE)
             
         reply_text = Texts.User.YOUTUBE_CHOOSE_TRANSCRIPT.format(
             title=f"Video ID: {video_id}", 
-            duration="N/A" # Placeholder
+            duration="N/A" 
         )
         
         await status_message.edit_text(
@@ -926,29 +903,24 @@ async def youtube_callback_handler(update: Update, context: ContextTypes.DEFAULT
     await query.answer("در حال دریافت رونوشت...")
 
     try:
-        # Callback data format: "yt:VIDEO_ID:LANG_CODE"
         _, video_id, lang_code = query.data.split(':')
     except (ValueError, IndexError):
         await query.edit_message_text(Texts.Errors.INVALID_CALLBACK_DATA)
         return
 
     try:
-        # Fetch the selected transcript
         transcript = ytt_api.get_transcript(video_id, languages=[lang_code])
-        
-        # Concatenate the text from each segment
+
         transcript_text = " ".join([segment['text'] for segment in transcript])
         
         source_info = {
             'type': 'youtube',
-            'cost': 0.0, # Fetching is free
+            'cost': 0.0,
             'id': video_id,
             'lang_code': lang_code
         }
-        # Note: we pass query here so the helper can use `query.message.reply...`
         await deliver_transcription_result(update, context, transcript_text, source_info)
 
-        # Edit the original message to show the action was successful
         await query.edit_message_text(f"✅ رونوشت زبان '{lang_code}' با موفقیت پردازش و ارسال شد.")
 
     except Exception as e:

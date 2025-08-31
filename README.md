@@ -1,6 +1,6 @@
 # SedaNevis Telegram Bot
 
-Transcribes audio files and deliver transcription also options for some text processing actions.
+Transcribes audio files and delivers transcription plus options for some text processing to user.
 
 ## Features
 - Audio Transcription
@@ -12,7 +12,7 @@ Transcribes audio files and deliver transcription also options for some text pro
 - API Kyes (for Telegram and Gemini)
 
 ## Installation
-rename `.env.example` to `.env` then add your API keys, do the same for `prompts.example.py`, edit `prompts.py` to add needed prompts for transcription and other actions, Then
+rename the `.env.example` to `.env` then add your API keys, do the same for `prompts.example.py`, edit `prompts.py` to add needed prompts for transcription and other actions, Then
 
 ```bash
 docker compose build
