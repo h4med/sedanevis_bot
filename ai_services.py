@@ -30,14 +30,16 @@ def transcribe_audio_google_sync(file_path: str, duration_seconds: int, model: s
         start_time = time.time()
         uploaded_file = google_client.files.upload(file=file_path)
         logging.info(f"Uploaded audio {file_path} to Google: {uploaded_file.uri}")
-        max_tokens = duration_seconds * 10
+        max_tokens = duration_seconds * 15
+        # max_tokens = 65536
         
         transcription_response = google_client.models.generate_content(
             model=model,
             contents=[prompt, uploaded_file],
             config=types.GenerateContentConfig(
                 thinking_config=types.ThinkingConfig(thinking_budget=0),
-                temperature=0.05,
+                temperature=1,
+                topP=0.95,
                 max_output_tokens=max_tokens,
             ),
         )
