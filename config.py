@@ -44,3 +44,7 @@ MAX_AUDIO_DURATION_SECONDS = int(os.getenv('MAX_AUDIO_DURATION_SECONDS', 10800))
 TRANSCRIPTION_EXECUTOR = ThreadPoolExecutor(max_workers=2000, thread_name_prefix="transcription_worker")
 TOKEN_COUNTING_EXECUTOR = ThreadPoolExecutor(max_workers=100, thread_name_prefix="token_counter")
 TEXT_PROCESS_EXECUTOR = ThreadPoolExecutor(max_workers=500, thread_name_prefix="text_processor")
+AUDIO_PROCESS_EXECUTOR = ThreadPoolExecutor(max_workers=10, thread_name_prefix="audio_processor")
+
+MAX_CHUNK_LEN = 30
+CHUNK_SIZE = 15

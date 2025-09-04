@@ -7,6 +7,7 @@ import json
 import asyncio
 import jdatetime
 import pytz
+import math
 
 from functools import wraps
 from pydub import AudioSegment
@@ -14,7 +15,7 @@ from pydub.exceptions import CouldntDecodeError
 from youtube_transcript_api import YouTubeTranscriptApi, TranscriptsDisabled, NoTranscriptFound
 
 import config
-from prompts import TRANSCRIBER_PROMPT, ACTIONS_PROMPT_MAPPING
+from prompts import TRANSCRIBER_PROMPT, ACTIONS_PROMPT_MAPPING, ACTIONS_MAX_TOKENS_MAPPING
 
 
 ytt_api = YouTubeTranscriptApi()
@@ -170,6 +171,7 @@ async def handle_media_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
     duration_seconds = file_object.duration
     cost_minutes = duration_seconds / 60.0
+    duration_minutes = duration_seconds / 60.0  # For chunking check
 
     if cost_minutes > db_user.credit_minutes:
         await message.reply_text(
@@ -186,8 +188,8 @@ async def handle_media_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     original_extension = os.path.splitext(original_filename)[1] or '.tmp'
     local_file_path = os.path.join(downloads_dir, f"downloaded_{file_object.file_unique_id}{original_extension}")    
-    ready_for_transcription_path = None
-    
+    processed_audio_path = f"downloads/converted_{file_object.file_unique_id}.mp3"
+
     try:
         logging.info(f"Downloading file. Size: {file_object.file_size} bytes.")
 
@@ -206,31 +208,94 @@ async def handle_media_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await bot_file.download_to_drive(local_file_path)
 
         audio = AudioSegment.from_file(local_file_path)
-        processed_audio = audio.set_frame_rate(32000).set_channels(1)
-        ready_for_transcription_path = f"downloads/converted_{file_object.file_unique_id}.mp3"
-        processed_audio.export(ready_for_transcription_path, format="mp3", bitrate="32k")
+        processed_audio = audio.set_frame_rate(32000).set_channels(1).apply_gain(6.0)
+        processed_audio.export(processed_audio_path, format="mp3", bitrate="32k")
+
+        # Remove original large file early to save space
+        os.remove(local_file_path) if os.path.exists(local_file_path) else None
+
         duration_str = f"{len(audio) // 60000:02d}:{ (len(audio) // 1000) % 60:02d}"
 
-        await status_message.edit_text(
-            Texts.User.MEDIA_PROCESSING_DONE.format(duration=duration_str)
-        )
-            
-        loop = asyncio.get_event_loop()
-        transcription_result_dict = await loop.run_in_executor(
-            config.TRANSCRIPTION_EXECUTOR,
-            transcribe_audio_google_sync,
-            ready_for_transcription_path,
-            duration_seconds,
-            "gemini-2.5-flash",
-            TRANSCRIBER_PROMPT,            
-        )
+        # Single loop: Create chunk → Transcribe → Delete (for chunked files) or direct transcribe (for short files)
+        full_transcript = ""
         
+        if duration_minutes > config.MAX_CHUNK_LEN:
+            # Chunking mode
+            chunk_length_ms = config.CHUNK_SIZE * 60 * 1000
+            total_length_ms = len(processed_audio)
+            num_chunks = math.ceil(total_length_ms / chunk_length_ms)
+            logging.info(f"duration_minutes: {duration_minutes} (MAX_CHUNK_LEN: {config.MAX_CHUNK_LEN}), We need to chunk file, num_chunks: {num_chunks}")
+            
+            for i in range(num_chunks):
+                # Temporary chunk path
+                chunk_path = f"downloads/temp_chunk_{file_object.file_unique_id}_{i+1}.mp3"
+                
+                progress = 100 * i / num_chunks
+                logging.info(f"Prcessing chunk: {i} from {num_chunks}, progress: {progress}")
+                await status_message.edit_text(Texts.User.TRANSCRIPTION_IN_PROGRESS.format(progress=progress))
 
-        if transcription_result_dict.get("error"):
-            await status_message.edit_text(Texts.Errors.AUDIO_TRANSCRIPTION_FAILED.format(error=transcription_result_dict['error']))
-            return
+                start_ms = i * chunk_length_ms
+                end_ms = min(start_ms + chunk_length_ms, total_length_ms)
+                chunk = processed_audio[start_ms:end_ms]  # Slice from pre-processed file
+                chunk.export(chunk_path, format="mp3", bitrate="32k")
+                
+                loop = asyncio.get_event_loop()
+                chunk_duration = int(duration_seconds / num_chunks)
+                transcription_result_dict = await loop.run_in_executor(
+                    config.TRANSCRIPTION_EXECUTOR,
+                    transcribe_audio_google_sync,
+                    chunk_path,
+                    chunk_duration,
+                    "gemini-2.5-flash",
+                    TRANSCRIBER_PROMPT,
+                )
+                
+                if transcription_result_dict.get("error"):
+                    await status_message.edit_text(
+                        Texts.Errors.AUDIO_TRANSCRIPTION_FAILED.format(error=transcription_result_dict['error'])
+                    )
+                    return
+                
+                # Append to full transcript
+                chunk_transcript = transcription_result_dict.get("transcription", "")
+                full_transcript += chunk_transcript + " "
+                
+                os.remove(chunk_path)
+                
+            # Clean up processed file after all chunks done
+            os.remove(processed_audio_path)
+        
+        else:
+            # No chunking: Transcribe the single file
+            logging.info(f"duration_minutes: {duration_minutes} (MAX_CHUNK_LEN: {config.MAX_CHUNK_LEN}), No chunking is needed.")
+            await status_message.edit_text(
+                Texts.User.MEDIA_PROCESSING_DONE.format(duration=duration_str)
+            )
+            loop = asyncio.get_event_loop()
+            transcription_result_dict = await loop.run_in_executor(
+                config.TRANSCRIPTION_EXECUTOR,
+                transcribe_audio_google_sync,
+                processed_audio_path,
+                duration_seconds,
+                "gemini-2.5-flash",
+                TRANSCRIBER_PROMPT,
+            )
+            
+            if transcription_result_dict.get("error"):
+                await status_message.edit_text(
+                    Texts.Errors.AUDIO_TRANSCRIPTION_FAILED.format(error=transcription_result_dict['error'])
+                )
+                return
+            
+            chunk_transcript = transcription_result_dict.get("transcription", "")
+            full_transcript = chunk_transcript
+            
+            # Cleanup
+            os.remove(processed_audio_path)
+        
+        # Finalize transcript and send result
+        raw_transcript = full_transcript.strip()
 
-        raw_transcript = transcription_result_dict.get("transcription", "")
         language = db_user.preferred_language
 
         logging.info(f"Transcription successful. Length: {len(raw_transcript)} chars")
@@ -279,8 +344,10 @@ async def handle_media_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Clean up all generated files
         if os.path.exists(local_file_path):
             os.remove(local_file_path)
-        if ready_for_transcription_path and os.path.exists(ready_for_transcription_path):
-            os.remove(ready_for_transcription_path)
+        if os.path.exists(chunk_path):
+            os.remove(chunk_path)
+        if os.path.exists(processed_audio_path):
+            os.remove(processed_audio_path)
 
 
 async def button_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -322,17 +389,21 @@ async def button_callback_handler(update: Update, context: ContextTypes.DEFAULT_
             return
         
         full_prompt = prompt_template.format(text=text_to_process)
+        max_tokens = ACTIONS_MAX_TOKENS_MAPPING.get(action)
 
         loop = asyncio.get_event_loop()
-        estimated_tokens = await loop.run_in_executor(
+        estimated_input_tokens = await loop.run_in_executor(
             config.TOKEN_COUNTING_EXECUTOR,
             count_text_tokens,
             full_prompt,
             "gemini-2.0-flash-lite"
         )   
 
-        cost_minutes = estimated_tokens / config.TEXT_TOKENS_TO_MINUTES_COEFF
+        estimated_tokens = estimated_input_tokens + max_tokens
+        cost_minutes =  estimated_tokens / config.TEXT_TOKENS_TO_MINUTES_COEFF
         
+        logging.info(f"for Action-{action}, with max_tokens = {max_tokens}, estimated_tokens = {estimated_tokens}, cost_minutes = {cost_minutes} min")
+
         if cost_minutes > db_user.credit_minutes:
             await processing_message.edit_text(
                 Texts.User.CREDIT_INSUFFICIENT.format(current_credit=db_user.credit_minutes, cost=cost_minutes)
@@ -344,7 +415,8 @@ async def button_callback_handler(update: Update, context: ContextTypes.DEFAULT_
             config.TEXT_PROCESS_EXECUTOR,
             process_text_with_gemini,
             full_prompt,
-            "gemini-2.5-flash-lite"  # or your preferred model
+            "gemini-2.5-flash-lite",
+            max_tokens
         )
         
         if result_dict.get("error"):
@@ -354,7 +426,7 @@ async def button_callback_handler(update: Update, context: ContextTypes.DEFAULT_
         total_tokens_consumed = result_dict.get("total_token_count", 0)
         input_tc = result_dict.get("prompt_token_count", 0)
         output_tc = result_dict.get("candidates_token_count", 0)
-        logging.info(f"Action-{button_text} done, for {db_user.user_id},Tokens Input: {input_tc}, Output: {output_tc}, Total: {total_tokens_consumed}")
+        logging.info(f"Action-{action} done, for {db_user.user_id},Tokens Input: {input_tc}, Output: {output_tc}, Total: {total_tokens_consumed}")
                     
         # prompt_tokens_used = result_dict.get("prompt_token_count", 0)
         # output_tokens_generated = result_dict.get("candidates_token_count", 0)
