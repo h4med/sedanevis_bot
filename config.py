@@ -3,6 +3,7 @@ import logging
 import os
 from dotenv import load_dotenv
 from concurrent.futures import ThreadPoolExecutor
+import asyncio
 
 from telethon import TelegramClient
 from google import genai
@@ -38,6 +39,7 @@ google_client = genai.Client(api_key=GOOGLE_GEMINI_API_KEY)
 
 # Telethon Client (will be connected on-demand)
 telethon_client: TelegramClient | None = None
+telethon_lock = asyncio.Lock()
 
 MAX_AUDIO_DURATION_SECONDS = int(os.getenv('MAX_AUDIO_DURATION_SECONDS', 10800))  # 3 Hours default
 
@@ -46,5 +48,5 @@ TOKEN_COUNTING_EXECUTOR = ThreadPoolExecutor(max_workers=100, thread_name_prefix
 TEXT_PROCESS_EXECUTOR = ThreadPoolExecutor(max_workers=500, thread_name_prefix="text_processor")
 AUDIO_PROCESS_EXECUTOR = ThreadPoolExecutor(max_workers=10, thread_name_prefix="audio_processor")
 
-MAX_CHUNK_LEN = 30
-CHUNK_SIZE = 15
+MAX_CHUNK_LEN = 19
+CHUNK_SIZE = 10

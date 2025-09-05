@@ -42,7 +42,8 @@ from utils import (
     convert_md_to_html, deliver_transcription_result, 
     log_activity, check_user_status,
     get_action_keyboard, ensure_telethon_client,
-    create_word_document, extract_text_from_docx
+    create_word_document, extract_text_from_docx,
+    preprocess_audio_sync
 )
 
 admin_user_id = config.ADMIN_USER_ID
@@ -171,7 +172,7 @@ async def handle_media_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
     duration_seconds = file_object.duration
     cost_minutes = duration_seconds / 60.0
-    duration_minutes = duration_seconds / 60.0  # For chunking check
+    duration_minutes = duration_seconds / 60.0 
 
     if cost_minutes > db_user.credit_minutes:
         await message.reply_text(
@@ -182,7 +183,16 @@ async def handle_media_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    status_message = await message.reply_text(Texts.User.MEDIA_DOWNLOAD_START)
+    duration_str = f"{duration_seconds // 60:02d}:{ duration_seconds % 60:02d}"
+    status_message = await message.reply_text(
+        Texts.User.MEDIA_PROCESSING_MSG.format(
+            duration = duration_str,
+            download = "...",
+            process = "...",
+            transcription = "..."
+        )
+    )
+
     downloads_dir = os.path.join(os.getcwd(), "downloads")
     os.makedirs(downloads_dir, exist_ok=True)
 
@@ -207,39 +217,80 @@ async def handle_media_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
             bot_file = await context.bot.get_file(file_object.file_id)
             await bot_file.download_to_drive(local_file_path)
 
-        audio = AudioSegment.from_file(local_file_path)
-        processed_audio = audio.set_frame_rate(32000).set_channels(1).apply_gain(6.0)
-        processed_audio.export(processed_audio_path, format="mp3", bitrate="32k")
+        await status_message.edit_text(Texts.User.MEDIA_PROCESSING_MSG.format(
+                duration = duration_str,
+                download = "✅",
+                process = "...",
+                transcription = "..."
+            ))                        
 
-        # Remove original large file early to save space
+        loop = asyncio.get_event_loop()
+        success, error_msg, original_length_ms = await loop.run_in_executor(
+            config.AUDIO_PROCESS_EXECUTOR,
+            preprocess_audio_sync,
+            local_file_path,
+            processed_audio_path
+        )
+        if not success:
+            await status_message.edit_text(Texts.User.MEDIA_PROCESSING_MSG.format(
+                    duration = duration_str,
+                    download = "✅",
+                    process = f"خطا در آماده‌سازی فایل: {error_msg}",
+                    transcription = "..."
+                ))              
+            if os.path.exists(local_file_path):
+                os.remove(local_file_path)
+            if os.path.exists(processed_audio_path):
+                os.remove(processed_audio_path)
+            return
+        
+        # Refine duration_str with accurate pydub length if available
+        if original_length_ms:
+            refined_duration_seconds = original_length_ms / 1000
+            duration_str = f"{original_length_ms // 60000:02d}:{(original_length_ms // 1000) % 60:02d}"
+            cost_minutes = refined_duration_seconds / 60.0  # Update cost for precision
+
         os.remove(local_file_path) if os.path.exists(local_file_path) else None
 
-        duration_str = f"{len(audio) // 60000:02d}:{ (len(audio) // 1000) % 60:02d}"
-
-        # Single loop: Create chunk → Transcribe → Delete (for chunked files) or direct transcribe (for short files)
+        await status_message.edit_text(Texts.User.MEDIA_PROCESSING_MSG.format(
+                duration = duration_str,
+                download = "✅",
+                process = "✅",
+                transcription = "..."
+            ))  
         full_transcript = ""
-        
+        loop = asyncio.get_event_loop()
+
         if duration_minutes > config.MAX_CHUNK_LEN:
             # Chunking mode
+            processed_audio = await loop.run_in_executor(
+                config.AUDIO_PROCESS_EXECUTOR,
+                AudioSegment.from_file,
+                processed_audio_path
+            )
+
             chunk_length_ms = config.CHUNK_SIZE * 60 * 1000
             total_length_ms = len(processed_audio)
             num_chunks = math.ceil(total_length_ms / chunk_length_ms)
             logging.info(f"duration_minutes: {duration_minutes} (MAX_CHUNK_LEN: {config.MAX_CHUNK_LEN}), We need to chunk file, num_chunks: {num_chunks}")
             
             for i in range(num_chunks):
-                # Temporary chunk path
-                chunk_path = f"downloads/temp_chunk_{file_object.file_unique_id}_{i+1}.mp3"
-                
-                progress = 100 * i / num_chunks
-                logging.info(f"Prcessing chunk: {i} from {num_chunks}, progress: {progress}")
-                await status_message.edit_text(Texts.User.TRANSCRIPTION_IN_PROGRESS.format(progress=progress))
+                progress = int(100 * (i+1) / num_chunks)
+                logging.info(f"Prcessing chunk: {i+1} from {num_chunks}, progress: {progress}")
 
+                await status_message.edit_text(Texts.User.MEDIA_PROCESSING_MSG.format(
+                        duration = duration_str,
+                        download = "✅",
+                        process = "✅",
+                        transcription = str(progress) + " %"
+                    ))
+                
                 start_ms = i * chunk_length_ms
                 end_ms = min(start_ms + chunk_length_ms, total_length_ms)
-                chunk = processed_audio[start_ms:end_ms]  # Slice from pre-processed file
+                chunk = processed_audio[start_ms:end_ms] 
+                chunk_path = os.path.join(downloads_dir, f"temp_chunk_{file_object.file_unique_id}_{i+1}.mp3")
                 chunk.export(chunk_path, format="mp3", bitrate="32k")
                 
-                loop = asyncio.get_event_loop()
                 chunk_duration = int(duration_seconds / num_chunks)
                 transcription_result_dict = await loop.run_in_executor(
                     config.TRANSCRIPTION_EXECUTOR,
@@ -251,27 +302,28 @@ async def handle_media_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
                 
                 if transcription_result_dict.get("error"):
-                    await status_message.edit_text(
-                        Texts.Errors.AUDIO_TRANSCRIPTION_FAILED.format(error=transcription_result_dict['error'])
-                    )
+                    await status_message.edit_text(Texts.User.MEDIA_PROCESSING_MSG.format(
+                            duration = duration_str,
+                            download = "✅",
+                            process = "✅",
+                            transcription = Texts.Errors.AUDIO_TRANSCRIPTION_FAILED.format(error=transcription_result_dict['error'])
+                        ))                    
                     return
-                
-                # Append to full transcript
+
                 chunk_transcript = transcription_result_dict.get("transcription", "")
                 full_transcript += chunk_transcript + " "
-                
                 os.remove(chunk_path)
-                
-            # Clean up processed file after all chunks done
+
             os.remove(processed_audio_path)
-        
         else:
             # No chunking: Transcribe the single file
             logging.info(f"duration_minutes: {duration_minutes} (MAX_CHUNK_LEN: {config.MAX_CHUNK_LEN}), No chunking is needed.")
-            await status_message.edit_text(
-                Texts.User.MEDIA_PROCESSING_DONE.format(duration=duration_str)
-            )
-            loop = asyncio.get_event_loop()
+            await status_message.edit_text(Texts.User.MEDIA_PROCESSING_MSG.format(
+                    duration = duration_str,
+                    download = "✅",
+                    process = "✅",
+                    transcription="در حال شروع..."
+                ))              
             transcription_result_dict = await loop.run_in_executor(
                 config.TRANSCRIPTION_EXECUTOR,
                 transcribe_audio_google_sync,
@@ -282,26 +334,30 @@ async def handle_media_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             
             if transcription_result_dict.get("error"):
-                await status_message.edit_text(
-                    Texts.Errors.AUDIO_TRANSCRIPTION_FAILED.format(error=transcription_result_dict['error'])
-                )
+                await status_message.edit_text(Texts.User.MEDIA_PROCESSING_MSG.format(
+                        duration = duration_str,
+                        download = "✅",
+                        process = "✅",
+                        transcription = Texts.Errors.AUDIO_TRANSCRIPTION_FAILED.format(error=transcription_result_dict['error'])
+                    ))                  
                 return
             
-            chunk_transcript = transcription_result_dict.get("transcription", "")
-            full_transcript = chunk_transcript
+            full_transcript = transcription_result_dict.get("transcription", "")
             
             # Cleanup
             os.remove(processed_audio_path)
         
-        # Finalize transcript and send result
         raw_transcript = full_transcript.strip()
-
         language = db_user.preferred_language
-
         logging.info(f"Transcription successful. Length: {len(raw_transcript)} chars")
 
-        await status_message.edit_text(Texts.User.TRANSCRIPTION_SUCCESS)
-
+        await status_message.edit_text(Texts.User.MEDIA_PROCESSING_MSG.format(
+                duration = duration_str,
+                download = "✅",
+                process = "✅",
+                transcription = "✅"
+            ))   
+        
         # Credit Deduction & Logging
         db = SessionLocal()
         try:
@@ -341,14 +397,13 @@ async def handle_media_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
             error_msg = Texts.Errors.OUTPUT_TOO_LONG
         await status_message.edit_text(Texts.Errors.GENERIC_UNEXPECTED.format(error=error_msg))        
     finally:
-        # Clean up all generated files
-        if os.path.exists(local_file_path):
-            os.remove(local_file_path)
-        if os.path.exists(chunk_path):
-            os.remove(chunk_path)
-        if os.path.exists(processed_audio_path):
-            os.remove(processed_audio_path)
-
+        for file_path in [local_file_path, processed_audio_path]:
+            if os.path.exists(file_path):
+                try:
+                    os.remove(file_path)
+                    logging.info(f"Cleaned up: {file_path}")
+                except Exception as cleanup_error:
+                    logging.warning(f"Failed to delete {file_path}: {cleanup_error}")
 
 async def button_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """

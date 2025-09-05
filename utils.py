@@ -1,5 +1,5 @@
 # utils.py
-
+import os
 import logging
 import html
 from functools import wraps
@@ -7,6 +7,8 @@ import io
 import asyncio
 import jdatetime
 import pytz
+from pydub import AudioSegment
+from pydub.exceptions import CouldntDecodeError
 
 from markdown_it import MarkdownIt
 from bs4 import BeautifulSoup, NavigableString 
@@ -381,7 +383,6 @@ def check_user_status(func):
                 await update.message.reply_text(Texts.User.REJECTED_STATUS)
                 return
             
-            # If user is approved, add user object to context and proceed
             if user.status == 'approved':
                 context.user_data['db_user'] = user
                 return await func(update, context, *args, **kwargs)
@@ -391,8 +392,6 @@ def check_user_status(func):
 
     return wrapper
 
-
-# def get_action_keyboard():
 def get_action_keyboard(action1_estimated_minutes=0, action2_estimated_minutes=0, action3_estimated_minutes=0):
 
     def format_minutes(minutes):
@@ -423,39 +422,35 @@ def get_action_keyboard(action1_estimated_minutes=0, action2_estimated_minutes=0
     ]    
     return InlineKeyboardMarkup(keyboard)
 
-# --- Telethon Helper ---
 async def ensure_telethon_client():
-    if config.telethon_client is None or not config.telethon_client.is_connected():
-        logging.info("Initializing Telethon client...")
+    async with config.telethon_lock:
+        if config.telethon_client is None or not config.telethon_client.is_connected():
+            logging.info("Initializing Telethon client...")
+            
+            session_path = os.path.join('persistent_data', f'bot_session_{os.getpid()}')  
+            client = TelegramClient(session_path, config.TG_API_ID, config.TG_API_HASH, auto_reconnect=True)
+            try:
+                await client.start(bot_token=config.TG_BOT_TOKEN)
+                config.telethon_client = client
+                logging.info("Telethon client started and authorized.")
+            except Exception as e:
+                logging.error(f"Failed to start Telethon client: {e}")
+                raise
+        return config.telethon_client
 
-        # --- Point the session file to the persistent data directory ---
-        session_path = 'persistent_data/bot_session_name'        
-
-        # client = TelegramClient('bot_session_name', config.TG_API_ID, config.TG_API_HASH, auto_reconnect=True)
-        client = TelegramClient(session_path, config.TG_API_ID, config.TG_API_HASH, auto_reconnect=True)
-        await client.start(bot_token=config.TG_BOT_TOKEN)
-        config.telethon_client = client
-        logging.info("Telethon client started and authorized.")
-    return config.telethon_client
 
 async def extract_text_from_docx(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
     """Extract text from DOCX file."""
     try:
-        # Get file info
         docx_file = update.message.document
-        
-        # Check file size (optional - prevent very large files)
+
         if docx_file.file_size > 5 * 1024 * 1024:  # 5MB limit
             await update.message.reply_text("File too large. Please upload a file smaller than 5MB.")
             return None
         
-        # Get file object
         file_obj = await context.bot.get_file(docx_file.file_id)
-        
-        # Download file content
         file_bytes = await file_obj.download_as_bytearray()
         
-        # Extract text from DOCX
         doc = Document(io.BytesIO(bytes(file_bytes)))
         text = ""
         for paragraph in doc.paragraphs:
@@ -467,3 +462,24 @@ async def extract_text_from_docx(update: Update, context: ContextTypes.DEFAULT_T
         await update.message.reply_text("Sorry, I couldn't process your DOCX file. Please make sure it's a valid Word document.")
         print(f"Error processing DOCX: {e}")
         return None
+
+def preprocess_audio_sync(raw_file_path: str, processed_audio_path: str) -> tuple:
+    """
+    Synchronous function to preload and preprocess audio to 32kHz mono MP3.
+    Returns (success: bool, error_msg: str or None, original_length_ms: int or None)
+    for better error handling in the main async method.
+    """
+    try:
+        audio = AudioSegment.from_file(raw_file_path)
+
+        processed_audio = audio.set_frame_rate(32000).set_channels(1).apply_gain(6.0)
+        processed_audio.export(processed_audio_path, format="mp3", bitrate="32k")
+
+        return True, None, len(audio)
+    
+    except CouldntDecodeError as e:
+        return False, "فایل صوتی فرمت ناشناخته یا خرابی دارد و قابل پردازش نیست.", None
+    except FileNotFoundError:
+        return False, "فایل دانلود شده یافت نشد – لطفا مجددا تلاش کنید.", None
+    except Exception as e:
+        return False, f"خطا در پردازش فایل: {str(e)}", None

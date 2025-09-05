@@ -60,7 +60,13 @@ class Texts:
             "هزینه این عملیات: {cost:.1f} دقیقه\n\n"
             "@SedaNevis_bot\n"
         )
-
+        MEDIA_PROCESSING_MSG = (
+            "فایل دریافت شد. طول فایل: {duration}\n\n"
+            "دانلود: {download}\n"
+            "پردازش: {process}\n"
+            "رونویسی: {transcription}\n\n"
+            "@SedaNevis_bot\n"
+        )
         MEDIA_DOWNLOAD_START = "فایل دریافت شد! در حال دانلود و پردازش اولیه هستیم.\n\nاز شکیبایی شما سپاس‌گذاریم 🙏\n\n@SedaNevis_bot\n"
         MEDIA_DOWNLOAD_DONE = "فایل دانلود شد. در حال پردازش و استخراج صدا..."
         MEDIA_PROCESSING_DONE = (
