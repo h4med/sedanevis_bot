@@ -15,7 +15,12 @@ from pydub.exceptions import CouldntDecodeError
 from youtube_transcript_api import YouTubeTranscriptApi, TranscriptsDisabled, NoTranscriptFound
 
 import config
-from prompts import TRANSCRIBER_PROMPT, ACTIONS_PROMPT_MAPPING, ACTIONS_MAX_TOKENS_MAPPING
+from prompts import (
+    TRANSCRIBER_PROMPT, 
+    ACTIONS_PROMPT_MAPPING, 
+    ACTIONS_MAX_TOKENS_MAPPING,
+    TRANSCRIBER_SRT_PROMPT
+)
 
 
 ytt_api = YouTubeTranscriptApi()
@@ -43,7 +48,8 @@ from utils import (
     log_activity, check_user_status,
     get_action_keyboard, ensure_telethon_client,
     create_word_document, extract_text_from_docx,
-    preprocess_audio_sync
+    preprocess_audio_sync, deliver_srt_file,
+    correct_srt_format
 )
 
 admin_user_id = config.ADMIN_USER_ID
@@ -201,13 +207,13 @@ async def handle_media_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
     processed_audio_path = f"downloads/converted_{file_object.file_unique_id}.mp3"
 
     try:
-        logging.info(f"Downloading file. Size: {file_object.file_size} bytes.")
+        logging.info(f"Downloading Audio file. Size: {file_object.file_size} bytes.")
 
         if file_object.file_size > config.TELEGRAM_MAX_BOT_API_FILE_SIZE:
             logging.info("File is larger than 20MB, using Telethon for download.")
             client = await ensure_telethon_client()
             logging.info(f"Starting download using file_id: {file_object.file_id}")
-            # Telethon can get the message by its ID and download the media within it
+
             telethon_message = await client.get_messages(entity=message.chat_id, ids=message.message_id)
             if not telethon_message or not (telethon_message.audio or telethon_message.voice or telethon_message.video or telethon_message.document):
                 raise ValueError("Could not find media in message via Telethon.")
@@ -243,14 +249,11 @@ async def handle_media_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if os.path.exists(processed_audio_path):
                 os.remove(processed_audio_path)
             return
-        
-        # Refine duration_str with accurate pydub length if available
+
         if original_length_ms:
             refined_duration_seconds = original_length_ms / 1000
             duration_str = f"{original_length_ms // 60000:02d}:{(original_length_ms // 1000) % 60:02d}"
-            cost_minutes = refined_duration_seconds / 60.0  # Update cost for precision
-
-        os.remove(local_file_path) if os.path.exists(local_file_path) else None
+            cost_minutes = refined_duration_seconds / 60.0  
 
         await status_message.edit_text(Texts.User.MEDIA_PROCESSING_MSG.format(
                 duration = duration_str,
@@ -535,6 +538,268 @@ async def button_callback_handler(update: Update, context: ContextTypes.DEFAULT_
         await query.message.reply_text(Texts.Errors.GENERIC_UNEXPECTED_ADMIN.format(error=e))
     finally:
         db.close()
+
+@check_user_status
+async def handle_video_file(update, context):
+    message = update.message
+
+    db_user: User = context.user_data['db_user']
+    message = update.message
+    file_object, user_file_name = None, None
+    
+
+    if message.video:
+        file_object, user_file_name = message.video, message.video.file_name or f"{message.video.file_unique_id}.mp4"
+    else:
+        return
+    
+    if file_object.duration > config.MAX_AUDIO_DURATION_SECONDS:
+        await message.reply_text(Texts.Errors.VIDEO_TOO_LONG)
+        return
+    
+    # file_object = message.video
+    # user_file_name = file_object.file_name or f"video_{file_object.file_unique_id}.mp4"
+    duration_seconds = file_object.duration
+    cost_minutes = duration_seconds / 60.0
+    if cost_minutes > context.user_data['db_user'].credit_minutes:
+        await message.reply_text(Texts.User.CREDIT_INSUFFICIENT.format(
+            current_credit=context.user_data['db_user'].credit_minutes,
+            cost=cost_minutes
+        ))
+        return
+
+    unique_key = file_object.file_unique_id
+    context.user_data[unique_key] = {
+        'file_id': file_object.file_id,
+        'file_size': file_object.file_size,
+        'user_file_name': user_file_name,
+        'duration_seconds': duration_seconds,
+        'original_message_id': message.message_id 
+    }
+
+    keyboard = [
+        [InlineKeyboardButton("دریافت رونویسی خام", callback_data=f"video_raw:{unique_key}")],
+        [InlineKeyboardButton("دریافت زیرنویس (srt)", callback_data=f"video_srt:{unique_key}")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await message.reply_text("نوع خروجی را انتخاب کنید:", reply_markup=reply_markup, parse_mode=ParseMode.HTML)
+
+async def handle_video_callback(update, context):
+    query = update.callback_query
+    await query.answer()
+    
+    data = query.data.split(":")
+    action = data[0]
+    unique_key = data[1]
+    file_data = context.user_data.get(unique_key)
+    if not file_data:
+        await query.edit_message_text("درخواست منقضی شده است.")
+        return
+
+    file_id = file_data['file_id']
+    file_size = file_data['file_size']
+    user_file_name = file_data['user_file_name']
+    duration_seconds = file_data['duration_seconds']
+    original_message_id = file_data['original_message_id'] 
+
+    cost_minutes = int(duration_seconds / 60.0 )
+    db_user = context.user_data['db_user']
+   
+    duration_str = f"{duration_seconds // 60:02d}:{ duration_seconds % 60:02d}"
+
+    status_message = await query.edit_message_text(
+        Texts.User.MEDIA_PROCESSING_MSG.format(
+            duration = duration_str,
+            download = "شروع شد...",
+            process = "...",
+            transcription = "..."
+        )
+    )
+
+    downloads_dir = os.path.join(os.getcwd(), "downloads")
+    os.makedirs(downloads_dir, exist_ok=True)
+    
+    local_file_path = os.path.join(downloads_dir, f"video_{file_id}.mp4")
+    processed_audio_path = os.path.join(downloads_dir, f"processed_{file_id}.mp3")
+    
+    try:       
+        logging.info(f"Downloading Video file. Size: {file_size} bytes.")
+
+        if file_size > config.TELEGRAM_MAX_BOT_API_FILE_SIZE:
+            logging.info("Video file is larger than 20MB, using Telethon for download.")
+            client = await ensure_telethon_client()
+            logging.info(f"Starting download using file_id: {file_id}")
+            
+            # telethon_message = await client.get_messages(entity=update.effective_chat.id, ids=query.message.message_id)
+            telethon_message = await client.get_messages(entity=query.message.chat_id, ids=original_message_id)
+            
+            if not telethon_message or not (telethon_message.audio or telethon_message.voice or telethon_message.video or telethon_message.document):
+                logging.error(f"Telethon could not find media: chat={query.message.chat_id}, msg_id={original_message_id}")
+                raise ValueError("Could not find media in message via Telethon.")
+            await client.download_media(telethon_message, file=local_file_path)
+        else:
+            logging.info("Video file is smaller than 20MB, using Bot API for download.")
+            bot_file = await context.bot.get_file(file_id)
+            await bot_file.download_to_drive(local_file_path) 
+
+        await status_message.edit_text(
+            Texts.User.MEDIA_PROCESSING_MSG.format(
+                duration = duration_str,
+                download = "✅",
+                process = "شروع شد...",
+                transcription = "..."
+            )
+        )
+        loop = asyncio.get_event_loop()
+        success, error_msg, original_length_ms = await loop.run_in_executor(
+            config.AUDIO_PROCESS_EXECUTOR, 
+            preprocess_audio_sync, 
+            local_file_path, 
+            processed_audio_path
+        )
+
+        if not success:
+            # await status_message.edit_text(f"خطا در پردازش ویدیو: {error_msg}")
+            await status_message.edit_text(
+                Texts.User.MEDIA_PROCESSING_MSG.format(
+                    duration = duration_str,
+                    download = "✅",
+                    process = f"خطا در آماده‌سازی فایل: {error_msg}",
+                    transcription = "..."
+                )
+            )            
+            if os.path.exists(local_file_path):
+                os.remove(local_file_path)
+            if os.path.exists(processed_audio_path):
+                os.remove(processed_audio_path)            
+            return
+        
+        if original_length_ms:
+            refined_duration_seconds = original_length_ms / 1000
+            duration_str = f"{original_length_ms // 60000:02d}:{(original_length_ms // 1000) % 60:02d}"
+            cost_minutes = refined_duration_seconds / 60.0  # Update cost for precision
+
+        # await status_message.edit_text(f"ویدیو پردازش شد (طول: {duration_str}). در حال رونویسی...")
+        await status_message.edit_text(
+            Texts.User.MEDIA_PROCESSING_MSG.format(
+                duration = duration_str,
+                download = "✅",
+                process = "✅",
+                transcription = "شروع شد...",
+            )
+        )  
+
+        full_transcript = ""
+        duration_minutes = duration_seconds / 60.0
+        
+        if duration_minutes > config.MAX_CHUNK_LEN:
+            processed_audio = AudioSegment.from_file(processed_audio_path)
+            chunk_length_ms = config.CHUNK_SIZE * 60 * 1000
+            total_length_ms = len(processed_audio)
+            num_chunks = math.ceil(total_length_ms / chunk_length_ms)
+            
+            for i in range(num_chunks):
+                progress = int(100 * (i+1) / num_chunks)
+                logging.info(f"Prcessing chunk: {i+1} from {num_chunks}, progress: {progress}")
+                await status_message.edit_text(Texts.User.MEDIA_PROCESSING_MSG.format(
+                        duration = duration_str,
+                        download = "✅",
+                        process = "✅",
+                        transcription = str(progress) + " %"
+                    ))
+                                                
+                start_ms = i * chunk_length_ms
+                end_ms = min(start_ms + chunk_length_ms, total_length_ms)
+                chunk = processed_audio[start_ms:end_ms]
+                chunk_path = f"downloads/temp_chunk_{file_id}_{i+1}.mp3"
+                chunk.export(chunk_path, format="mp3", bitrate="32k")
+                
+                prompt = TRANSCRIBER_SRT_PROMPT if action == "video_srt" else TRANSCRIBER_PROMPT
+                chunk_duration = int(duration_seconds / num_chunks)
+                transcription_result_dict = await loop.run_in_executor(
+                    config.TRANSCRIPTION_EXECUTOR, 
+                    transcribe_audio_google_sync, 
+                    chunk_path, 
+                    chunk_duration, 
+                    "gemini-2.5-flash", 
+                    prompt
+                )
+                
+                if transcription_result_dict.get("error"):
+                    # await status_message.edit_text(f"خطا در رونویسی: {transcription_result_dict['error']}")
+                    await status_message.edit_text(Texts.User.MEDIA_PROCESSING_MSG.format(
+                            duration = duration_str,
+                            download = "✅",
+                            process = "✅",
+                            transcription = Texts.Errors.AUDIO_TRANSCRIPTION_FAILED.format(error=transcription_result_dict['error'])
+                        ))                      
+                    return
+                
+                full_transcript += transcription_result_dict.get("transcription", "") + " "
+                os.remove(chunk_path)
+            
+            os.remove(processed_audio_path)
+        else:
+            prompt = TRANSCRIBER_SRT_PROMPT if action == "video_srt" else TRANSCRIBER_PROMPT
+            await status_message.edit_text(Texts.User.MEDIA_PROCESSING_MSG.format(
+                    duration = duration_str,
+                    download = "✅",
+                    process = "✅",
+                    transcription="در حال شروع..."
+                ))  
+            transcription_result_dict = await loop.run_in_executor(
+                config.TRANSCRIPTION_EXECUTOR, 
+                transcribe_audio_google_sync, 
+                processed_audio_path, 
+                duration_seconds, 
+                "gemini-2.5-flash", 
+                prompt
+            )
+            
+            if transcription_result_dict.get("error"):
+                # await status_message.edit_text(f"خطا در رونویسی: {transcription_result_dict['error']}")
+                # return
+                await status_message.edit_text(Texts.User.MEDIA_PROCESSING_MSG.format(
+                        duration = duration_str,
+                        download = "✅",
+                        process = "✅",
+                        transcription = Texts.Errors.AUDIO_TRANSCRIPTION_FAILED.format(error=transcription_result_dict['error'])
+                    ))                  
+                return
+                        
+            full_transcript = transcription_result_dict.get("transcription", "")
+            os.remove(processed_audio_path)
+        
+        os.remove(local_file_path)
+
+        await status_message.edit_text(Texts.User.MEDIA_PROCESSING_MSG.format(
+                duration = duration_str,
+                download = "✅",
+                process = "✅",
+                transcription = "✅"
+            ))   
+                
+        if action == "video_srt":
+            # full_transcript = correct_srt_format(full_transcript)
+            await deliver_srt_file(update, context, full_transcript, user_file_name, cost_minutes)
+        else:
+            source_info = {'type': 'video_raw', 'cost': cost_minutes, 'language': db_user.preferred_language}
+            await deliver_transcription_result(update, context, full_transcript, source_info)
+        
+        db = SessionLocal()
+        user_to_update = db.query(User).filter(User.user_id == db_user.user_id).first()
+        if user_to_update:
+            user_to_update.credit_minutes -= cost_minutes
+            db.commit()
+        db.close()
+        
+    except Exception as e:
+        await status_message.edit_text(f"خطا: {str(e)}")
+    finally:
+        for f in [local_file_path, processed_audio_path]:
+            if os.path.exists(f):
+                os.remove(f)
+
 
 async def approval_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handles the 'approve' and 'reject' callbacks from the admin."""
@@ -1053,3 +1318,4 @@ async def youtube_callback_handler(update: Update, context: ContextTypes.DEFAULT
     except Exception as e:
         logging.error(f"Error processing YouTube callback for {video_id}: {e}", exc_info=True)
         await query.edit_message_text(Texts.Errors.YOUTUBE_FETCH_ERROR.format(error=e))        
+

@@ -9,6 +9,7 @@ import jdatetime
 import pytz
 from pydub import AudioSegment
 from pydub.exceptions import CouldntDecodeError
+import tempfile
 
 from markdown_it import MarkdownIt
 from bs4 import BeautifulSoup, NavigableString 
@@ -483,3 +484,53 @@ def preprocess_audio_sync(raw_file_path: str, processed_audio_path: str) -> tupl
         return False, "فایل دانلود شده یافت نشد – لطفا مجددا تلاش کنید.", None
     except Exception as e:
         return False, f"خطا در پردازش فایل: {str(e)}", None
+    
+async def deliver_srt_file(update, context, srt_content, filename, cost_minutes):
+    srt_filename = f"{filename.replace('.mp4', '')}.srt"
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.srt', delete=False) as temp_file:
+        temp_file.write(srt_content)
+        temp_file_path = temp_file.name
+    
+    try:
+        await context.bot.send_document(
+            update.effective_chat.id,
+            document=open(temp_file_path, 'rb'),
+            filename=srt_filename,
+            caption=f"زیرنویس برای {filename} آماده شد. هزینه: {cost_minutes:.1f} دقیقه."
+        )
+    finally:
+        os.unlink(temp_file_path)
+
+def correct_srt_format(srt_content):
+    corrected = []
+    lines = srt_content.strip().split('\n')
+    i = 0
+    seq = 1
+    while i < len(lines):
+        if lines[i].strip().isdigit():
+            start_end = lines[i+1] if i+1 < len(lines) else ""
+            text = lines[i+2] if i+2 < len(lines) else ""
+            if " --> " in start_end:
+                corrected.append(str(seq))
+                parts = start_end.split(" --> ")
+                if len(parts) == 2:
+                    start = parts[0].strip()
+                    end = parts[1].strip()
+                    if re.match(r'\d{2}:\d{2}:\d{2},\d{3}', start):
+                        start = start
+                    else:
+                        start = re.sub(r'(\d{2}:\d{2}:\d{2})(,\d+)?', lambda m: m.group(1) + (m.group(2) if m.group(2) else ',000'), start)
+                    if re.match(r'\d{2}:\d{2}:\d{2},\d{3}', end):
+                        end = end
+                    else:
+                        end = re.sub(r'(\d{2}:\d{2}:\d{2})(,\d+)?', lambda m: m.group(1) + (m.group(2) if m.group(2) else ',000'), end)
+                    corrected.append(f"{start} --> {end}")
+                corrected.append(text)
+                corrected.append("")
+                seq += 1
+            i += 3
+        else:
+            if lines[i].strip():
+                corrected.append(lines[i].strip())
+            i += 1
+    return '\n'.join(corrected)

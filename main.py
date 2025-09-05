@@ -30,6 +30,8 @@ from handlers import (
     user_logs_command,   
     handle_youtube_url,    
     youtube_callback_handler,   
+    handle_video_file,
+    handle_video_callback,    
 )
 from database import create_db_and_tables
 from texts import Texts  
@@ -99,9 +101,10 @@ def main() -> None:
     application.add_handler(CommandHandler('user_logs', user_logs_command)) 
 
     application.add_handler(MessageHandler(
-        filters.VOICE | filters.AUDIO | filters.VIDEO, 
+        filters.VOICE | filters.AUDIO, 
         handle_media_file
     ))    
+    application.add_handler(MessageHandler(filters.VIDEO, handle_video_file))
     application.add_handler(MessageHandler(filters.Document.TEXT, handle_text_file))
     application.add_handler(MessageHandler(
         filters.TEXT & filters.Entity("url") & (~filters.COMMAND), 
@@ -118,6 +121,7 @@ def main() -> None:
     application.add_handler(CallbackQueryHandler(approval_callback_handler, pattern=r'^(approve|reject):'))
     application.add_handler(CallbackQueryHandler(set_language_callback_handler, pattern=r'^set_lang:'))
     application.add_handler(CallbackQueryHandler(youtube_callback_handler, pattern=r'^yt:'))
+    application.add_handler(CallbackQueryHandler(handle_video_callback, pattern=r'^video_(raw|srt):'))
     application.add_handler(CallbackQueryHandler(button_callback_handler))
 
     application.add_error_handler(error_handler)
