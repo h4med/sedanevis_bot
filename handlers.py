@@ -193,7 +193,7 @@ async def handle_media_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
     status_message = await message.reply_text(
         Texts.User.MEDIA_PROCESSING_MSG.format(
             duration = duration_str,
-            download = "...",
+            download = "آغاز شد...",
             process = "...",
             transcription = "..."
         )
@@ -226,7 +226,7 @@ async def handle_media_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await status_message.edit_text(Texts.User.MEDIA_PROCESSING_MSG.format(
                 duration = duration_str,
                 download = "✅",
-                process = "...",
+                process = "آغاز شد...",
                 transcription = "..."
             ))                        
 
@@ -259,7 +259,7 @@ async def handle_media_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 duration = duration_str,
                 download = "✅",
                 process = "✅",
-                transcription = "..."
+                transcription = "آغاز شد..."
             ))  
         full_transcript = ""
         loop = asyncio.get_event_loop()
