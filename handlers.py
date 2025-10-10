@@ -487,14 +487,14 @@ async def button_callback_handler(update: Update, context: ContextTypes.DEFAULT_
             db_user.credit_minutes -= final_cost_minutes
             db.commit()
             log_activity(db=db, user_id=db_user.user_id, action=action, credit_change=-final_cost_minutes, details=f"TTS for {len(text_to_process)} chars")
-            logging.info(f"TTS complete. Deducted {final_cost_minutes:.4f} minutes. New balance: {db_user.credit_minutes:.2f}")
+            logging.info(f"TTS complete. Deducted {final_cost_minutes:.2f} minutes. New balance: {db_user.credit_minutes:.2f}")
 
             # 5. Send the audio file to the user
             audio_data = result_dict.get("audio_data")
             caption_text = (
                 f"🔊 فایل صوتی شما آماده است.\n\n"
-                f"هزینه عملیات: {cost_minutes_est:.2f} دقیقه\n"
-                f"<b>اعتبار باقی‌مانده: {db_user.credit_minutes:.2f} دقیقه</b>\n"
+                f"هزینه عملیات: {final_cost_minutes:.1f} دقیقه\n"
+                f"<b>اعتبار باقی‌مانده: {db_user.credit_minutes:.1f} دقیقه</b>\n"
                 "@SedaNevis_bot"
             )
             
