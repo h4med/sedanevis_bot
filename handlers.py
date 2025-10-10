@@ -1264,8 +1264,8 @@ async def handle_youtube_url(update: Update, context: ContextTypes.DEFAULT_TYPE)
             buttons.append([InlineKeyboardButton(button_text, callback_data=callback_data)])
         
         if not buttons:
-            await status_message.edit_text(Texts.Errors.YOUTUBE_NO_TRANSCRIPTS)
-            return
+            # This case will be caught by NoTranscriptFound, but we keep it for safety
+            raise NoTranscriptFound(video_id)
             
         reply_text = Texts.User.YOUTUBE_CHOOSE_TRANSCRIPT.format(
             title=f"Video ID: {video_id}", 
@@ -1278,13 +1278,74 @@ async def handle_youtube_url(update: Update, context: ContextTypes.DEFAULT_TYPE)
             parse_mode=ParseMode.HTML
         )
 
-    except TranscriptsDisabled:
-        await status_message.edit_text(Texts.Errors.YOUTUBE_TRANSCRIPTS_DISABLED)
-    except NoTranscriptFound:
-        await status_message.edit_text(Texts.Errors.YOUTUBE_NO_TRANSCRIPTS)
-    except Exception as e:
-        logging.error(f"Error fetching YouTube info for {video_id}: {e}", exc_info=True)
-        await status_message.edit_text(Texts.Errors.YOUTUBE_FETCH_ERROR.format(error=e))
+    # --- START OF MODIFICATION ---
+    # Catch all relevant exceptions in a single block
+    except (TranscriptsDisabled, NoTranscriptFound, Exception) as e:
+        # It's crucial to still log the *actual* error for debugging purposes
+        logging.error(f"Could not retrieve YouTube transcript for {video_id}: {e}", exc_info=True)
+        
+        # Send the unified workaround message to the user
+        await status_message.edit_text(
+            text=Texts.Errors.YOUTUBE_TRANSCRIPT_UNAVAILABLE_WORKAROUND,
+            parse_mode=ParseMode.MARKDOWN,
+            disable_web_page_preview=True
+        )
+        
+# @check_user_status
+# async def handle_youtube_url(update: Update, context: ContextTypes.DEFAULT_TYPE):
+#     """
+#     Handles messages containing YouTube URLs.
+#     """
+#     message = update.message
+#     url_entities = [entity for entity in message.entities if entity.type == 'url']
+#     if not url_entities:
+#         return 
+
+#     url = message.text[url_entities[0].offset : url_entities[0].offset + url_entities[0].length]
+
+#     video_id = get_yt_video_id(url)
+#     if not video_id:
+#         logging.info(f"Ignoring non-YouTube URL: {url}")
+#         return
+
+#     status_message = await message.reply_text(Texts.User.YOUTUBE_LOOKING_UP)
+
+#     try:
+#         transcript_list = ytt_api.list_transcripts(video_id)
+        
+#         buttons = []
+#         for transcript in transcript_list:
+#             lang_name = transcript.language
+#             lang_code = transcript.language_code
+#             is_generated = " (auto)" if transcript.is_generated else ""
+            
+#             button_text = f"{lang_name}{is_generated}"
+#             callback_data = f"yt:{video_id}:{lang_code}"
+            
+#             buttons.append([InlineKeyboardButton(button_text, callback_data=callback_data)])
+        
+#         if not buttons:
+#             await status_message.edit_text(Texts.Errors.YOUTUBE_NO_TRANSCRIPTS)
+#             return
+            
+#         reply_text = Texts.User.YOUTUBE_CHOOSE_TRANSCRIPT.format(
+#             title=f"Video ID: {video_id}", 
+#             duration="N/A" 
+#         )
+        
+#         await status_message.edit_text(
+#             reply_text,
+#             reply_markup=InlineKeyboardMarkup(buttons),
+#             parse_mode=ParseMode.HTML
+#         )
+
+#     except TranscriptsDisabled:
+#         await status_message.edit_text(Texts.Errors.YOUTUBE_TRANSCRIPTS_DISABLED)
+#     except NoTranscriptFound:
+#         await status_message.edit_text(Texts.Errors.YOUTUBE_NO_TRANSCRIPTS)
+#     except Exception as e:
+#         logging.error(f"Error fetching YouTube info for {video_id}: {e}", exc_info=True)
+#         await status_message.edit_text(Texts.Errors.YOUTUBE_FETCH_ERROR.format(error=e))
 
 
 async def youtube_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
