@@ -306,7 +306,7 @@ async def handle_media_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     transcribe_audio_google_sync,
                     chunk_path,
                     chunk_duration,
-                    "gemini-2.5-flash",
+                    "gemini-2.5-flash-preview-09-2025",
                     TRANSCRIBER_PROMPT,
                 )
                 
@@ -338,7 +338,7 @@ async def handle_media_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 transcribe_audio_google_sync,
                 processed_audio_path,
                 duration_seconds,
-                "gemini-2.5-flash",
+                "gemini-2.5-flash-preview-09-2025",
                 TRANSCRIBER_PROMPT,
             )
             
@@ -540,7 +540,7 @@ async def button_callback_handler(update: Update, context: ContextTypes.DEFAULT_
             config.TEXT_PROCESS_EXECUTOR,
             process_text_with_gemini,
             full_prompt,
-            "gemini-2.5-flash-lite",
+            "gemini-2.5-flash-lite-preview-09-2025",
             max_tokens
         )
         
@@ -784,7 +784,7 @@ async def handle_video_callback(update, context):
                     transcribe_audio_google_sync, 
                     chunk_path, 
                     chunk_duration, 
-                    "gemini-2.5-flash", 
+                    "gemini-2.5-flash-preview-09-2025", 
                     prompt
                 )
                 
@@ -815,7 +815,7 @@ async def handle_video_callback(update, context):
                 transcribe_audio_google_sync, 
                 processed_audio_path, 
                 duration_seconds, 
-                "gemini-2.5-flash", 
+                "gemini-2.5-flash-preview-09-2025", 
                 prompt
             )
             

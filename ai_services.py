@@ -81,7 +81,7 @@ def transcribe_audio_google_sync(file_path: str, duration_seconds: int, model: s
         logging.error(f"Error during Google transcription: {e}", exc_info=True)
         return {"error": f"An error occurred during Google transcription: {e}"}
     
-def process_text_with_gemini(prompt_text: str, model: str = "gemini-2.5-flash-lite", max_tokens:int = 1024) -> dict:
+def process_text_with_gemini(prompt_text: str, model: str = "gemini-2.5-flash-lite-preview-09-2025", max_tokens:int = 1024) -> dict:
     """
     Sends a text prompt to a GEMINI model and returns the response.
     Returns a dictionary with the generated text and usage data or an error.
