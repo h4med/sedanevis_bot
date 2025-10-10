@@ -3,6 +3,10 @@ import logging
 import time
 from google.genai import types
 
+import io  
+import wave 
+from pydub import AudioSegment 
+
 # Import the initialized client from our config file
 from config import google_client
 from texts import Texts
@@ -107,3 +111,73 @@ def process_text_with_gemini(prompt_text: str, model: str = "gemini-2.5-flash-li
     except Exception as e:
         logging.error(f"Error during Gemini text processing: {e}", exc_info=True)
         return {"error": f"An error occurred during Gemini text processing: {e}"}
+
+def generate_speech_gemini(text: str) -> dict:
+    """
+    Converts text to speech using the Gemini TTS model.
+    Returns a dictionary with the audio data or an error.
+    """
+    try:
+        logging.info(f"Generating speech for text of length: {len(text)}")
+        
+        # The 'text-to-speech' model automatically routes to the best available version.
+        response = google_client.models.generate_content(
+            model="gemini-2.5-flash-preview-tts", 
+            contents=text,
+            config=types.GenerateContentConfig(
+                response_modalities=["AUDIO"],
+                speech_config=types.SpeechConfig(
+                    voice_config=types.VoiceConfig(
+                        prebuilt_voice_config=types.PrebuiltVoiceConfig(
+                            # Using a high-quality voice
+                            voice_name='Kore', 
+                        )
+                    )
+                ),
+            )
+        )
+
+        if not response.candidates or not response.candidates[0].content.parts:
+            raise ValueError("API returned no audio data.")
+
+        # audio_data = response.candidates[0].content.parts[0].inline_data.data
+        pcm_data = response.candidates[0].content.parts[0].inline_data.data
+        # 1. Create a WAV file in memory from the raw PCM data
+        wav_buffer = io.BytesIO()
+        with wave.open(wav_buffer, "wb") as wf:
+            wf.setnchannels(1)       # Mono
+            wf.setsampwidth(2)       # 16-bit
+            wf.setframerate(24000)   # 24kHz sample rate (Gemini TTS default)
+            wf.writeframes(pcm_data)
+        wav_buffer.seek(0) # Rewind the buffer to the beginning
+
+        # 2. Load the in-memory WAV file using pydub
+        audio_segment = AudioSegment.from_wav(wav_buffer)
+        
+        # 3. Export it as an MP3 to another in-memory buffer
+        mp3_buffer = io.BytesIO()
+        audio_segment.export(mp3_buffer, format="mp3")
+        mp3_buffer.seek(0) # Rewind the buffer
+
+        # 4. Get the final MP3 data as bytes
+        mp3_data = mp3_buffer.getvalue()
+
+        logging.info(f"Successfully converted TTS output to MP3. Size: {len(mp3_data)} bytes.")
+
+        # It's good practice to also get usage metadata if available, though TTS might not provide it
+        usage = response.usage_metadata if hasattr(response, 'usage_metadata') else None
+        total_token_count = 0
+        if usage:
+            total_token_count = getattr(usage, 'total_token_count', 0) or 0
+            prompt_token_count = getattr(usage, 'prompt_token_count', 0) or 0
+            candidates_token_count = getattr(usage, 'candidates_token_count', 0) or 0
+            logging.info(f"TTS Usage - Prompt tokens: {prompt_token_count}, Candidate tokens: {candidates_token_count}, Total tokens: {total_token_count}")
+
+        return {
+            "audio_data": mp3_data,
+            "total_token_count": total_token_count, # For potential future cost calculation
+            "error": None
+        }
+    except Exception as e:
+        logging.error(f"Error during Gemini speech generation or conversion: {e}", exc_info=True)
+        return {"audio_data": None, "error": str(e)}

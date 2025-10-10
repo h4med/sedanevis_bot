@@ -393,7 +393,7 @@ def check_user_status(func):
 
     return wrapper
 
-def get_action_keyboard(action1_estimated_minutes=0, action2_estimated_minutes=0, action3_estimated_minutes=0):
+def get_action_keyboard(action1_estimated_minutes=0, action2_estimated_minutes=0, action3_estimated_minutes=0, action4_estimated_minutes=0):
 
     def format_minutes(minutes):
         if minutes >= 1:
@@ -419,7 +419,13 @@ def get_action_keyboard(action1_estimated_minutes=0, action2_estimated_minutes=0
                 f"{Texts.Keyboard.EXTRACT_MINUTES} (هزینه ~ {format_minutes(action3_estimated_minutes)}m)", 
                 callback_data='extract_mom'
             )
-        ]        
+        ],
+        [
+            InlineKeyboardButton(
+                f"{Texts.Keyboard.TEXT_TO_SPEECH} (هزینه ~ {format_minutes(action4_estimated_minutes)}m)",
+                callback_data='text_to_speech'
+            )
+        ]         
     ]    
     return InlineKeyboardMarkup(keyboard)
 

@@ -10,6 +10,7 @@ class Texts:
         SUMMARY_SHORT = "📄 خلاصه خیلی کوتاه"
         EXTRACT_POINTS = "💡استخراج نکات مهم"
         EXTRACT_MINUTES = "📑 استخراج صورت جلسه"     
+        TEXT_TO_SPEECH = "🔊 تبدیل به صوت"
 
         APPROVE_USER = "✅ Approve"
         REJECT_USER = "❌ Reject"

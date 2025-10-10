@@ -39,7 +39,8 @@ import config
 from ai_services import (
     count_text_tokens,
     process_text_with_gemini,
-    transcribe_audio_google_sync
+    transcribe_audio_google_sync,
+    generate_speech_gemini
 )
 from database import SessionLocal, User, ActivityLog
 from texts import Texts
@@ -88,22 +89,25 @@ async def handle_text_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data['last_text'] = text
 
     loop = asyncio.get_event_loop()
-    transcription_tokens = await loop.run_in_executor(
+    input_text_tokens = await loop.run_in_executor(
         config.TOKEN_COUNTING_EXECUTOR,
         count_text_tokens,
         text,
         "gemini-2.0-flash-lite"
     )    
-    action1_estimated_minutes = (transcription_tokens + 500) / config.TEXT_TOKENS_TO_MINUTES_COEFF
-    action2_estimated_minutes = (transcription_tokens + 2000) / config.TEXT_TOKENS_TO_MINUTES_COEFF
-    action3_estimated_minutes = (transcription_tokens + 1000) / config.TEXT_TOKENS_TO_MINUTES_COEFF
+    action1_estimated_minutes = (input_text_tokens + 500) / config.TEXT_TOKENS_TO_MINUTES_COEFF
+    action2_estimated_minutes = (input_text_tokens + 2000) / config.TEXT_TOKENS_TO_MINUTES_COEFF
+    action3_estimated_minutes = (input_text_tokens + 1000) / config.TEXT_TOKENS_TO_MINUTES_COEFF
+    TTS_estimated_minutes = (input_text_tokens * 8 / config.TEXT_TOKENS_TO_MINUTES_COEFF) * 4
 
     await update.message.reply_text(
         Texts.User.TEXT_RECEIVED,        
         reply_markup=get_action_keyboard(
             action1_estimated_minutes,
             action2_estimated_minutes,
-            action3_estimated_minutes
+            action3_estimated_minutes,
+            TTS_estimated_minutes
+            
         )        
     )
 
@@ -130,22 +134,24 @@ async def handle_text_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data['last_text'] = text
 
         loop = asyncio.get_event_loop()
-        transcription_tokens = await loop.run_in_executor(
+        input_text_tokens = await loop.run_in_executor(
             config.TOKEN_COUNTING_EXECUTOR,
             count_text_tokens,
             text,
             "gemini-2.0-flash-lite"
         )    
-        action1_estimated_minutes = (transcription_tokens + 500) / config.TEXT_TOKENS_TO_MINUTES_COEFF
-        action2_estimated_minutes = (transcription_tokens + 2000) / config.TEXT_TOKENS_TO_MINUTES_COEFF
-        action3_estimated_minutes = (transcription_tokens + 1000) / config.TEXT_TOKENS_TO_MINUTES_COEFF
+        action1_estimated_minutes = (input_text_tokens + 500) / config.TEXT_TOKENS_TO_MINUTES_COEFF
+        action2_estimated_minutes = (input_text_tokens + 2000) / config.TEXT_TOKENS_TO_MINUTES_COEFF
+        action3_estimated_minutes = (input_text_tokens + 1000) / config.TEXT_TOKENS_TO_MINUTES_COEFF
+        TTS_estimated_minutes = (input_text_tokens * 8 / config.TEXT_TOKENS_TO_MINUTES_COEFF) * 4
 
         await status_message.edit_text(
             Texts.User.TEXT_FILE_PROMPT,
             reply_markup=get_action_keyboard(
                 action1_estimated_minutes,
                 action2_estimated_minutes,
-                action3_estimated_minutes
+                action3_estimated_minutes,
+                TTS_estimated_minutes
             )              
         )
     except Exception as e:
@@ -441,6 +447,67 @@ async def button_callback_handler(update: Update, context: ContextTypes.DEFAULT_
             return
 
         action = query.data
+        logging.info(f"User {db_user.user_id} selected action: {action} ({button_text}), Text length: {len(text_to_process)} chars")
+
+        # --- TTS LOGIC ---
+        if action == 'text_to_speech':
+            # 1. Calculate cost based on the input text
+            loop = asyncio.get_event_loop()
+            input_tokens = await loop.run_in_executor(
+                config.TOKEN_COUNTING_EXECUTOR,
+                count_text_tokens,
+                text_to_process,
+                "gemini-2.0-flash-lite"
+            )
+            # Cost is based on action3's formula, multiplied by 4
+            cost_minutes_est = (input_tokens * 8 / config.TEXT_TOKENS_TO_MINUTES_COEFF) * 4
+            
+            logging.info(f"TTS Action: Input tokens: {input_tokens}, Estimated cost: {cost_minutes_est:.2f} minutes")
+
+            if cost_minutes_est > db_user.credit_minutes:
+                await processing_message.edit_text(
+                    Texts.User.CREDIT_INSUFFICIENT.format(current_credit=db_user.credit_minutes, cost=cost_minutes_est)
+                )
+                return
+
+            result_dict = await loop.run_in_executor(
+                config.TEXT_PROCESS_EXECUTOR,
+                generate_speech_gemini,
+                text_to_process
+            )
+
+            if result_dict.get("error"):
+                await processing_message.edit_text(f"خطا در تبدیل متن به صوت: {result_dict['error']}")
+                return
+
+            total_tokens_consumed = result_dict.get("total_token_count", 0)
+            final_cost_minutes = 4 * total_tokens_consumed / config.TEXT_TOKENS_TO_MINUTES_COEFF
+
+            # 4. Deduct credit and log
+            db_user.credit_minutes -= final_cost_minutes
+            db.commit()
+            log_activity(db=db, user_id=db_user.user_id, action=action, credit_change=-final_cost_minutes, details=f"TTS for {len(text_to_process)} chars")
+            logging.info(f"TTS complete. Deducted {final_cost_minutes:.4f} minutes. New balance: {db_user.credit_minutes:.2f}")
+
+            # 5. Send the audio file to the user
+            audio_data = result_dict.get("audio_data")
+            caption_text = (
+                f"🔊 فایل صوتی شما آماده است.\n\n"
+                f"هزینه عملیات: {cost_minutes_est:.2f} دقیقه\n"
+                f"<b>اعتبار باقی‌مانده: {db_user.credit_minutes:.2f} دقیقه</b>\n"
+                "@SedaNevis_bot"
+            )
+            
+            await query.message.reply_voice(
+                voice=audio_data,
+                caption=caption_text,
+                parse_mode=ParseMode.HTML
+            )
+            
+            await processing_message.delete()
+            return
+        
+
         prompt_template = ACTIONS_PROMPT_MAPPING.get(action)
         if not prompt_template:
             await processing_message.edit_text(text=Texts.Errors.ACTION_UNDEFINED.format(action=action))
@@ -486,10 +553,6 @@ async def button_callback_handler(update: Update, context: ContextTypes.DEFAULT_
         output_tc = result_dict.get("candidates_token_count", 0)
         logging.info(f"Action-{action} done, for {db_user.user_id},Tokens Input: {input_tc}, Output: {output_tc}, Total: {total_tokens_consumed}")
                     
-        # prompt_tokens_used = result_dict.get("prompt_token_count", 0)
-        # output_tokens_generated = result_dict.get("candidates_token_count", 0)
-        # total_tokens_consumed = result_dict.get("total_token_count", 0)
-        # total_tokens_consumed = prompt_tokens_used + output_tokens_generated
         final_cost_minutes = total_tokens_consumed / config.TEXT_TOKENS_TO_MINUTES_COEFF
         db_user.credit_minutes -= final_cost_minutes
         db.commit()
@@ -1278,8 +1341,6 @@ async def handle_youtube_url(update: Update, context: ContextTypes.DEFAULT_TYPE)
             parse_mode=ParseMode.HTML
         )
 
-    # --- START OF MODIFICATION ---
-    # Catch all relevant exceptions in a single block
     except (TranscriptsDisabled, NoTranscriptFound, Exception) as e:
         # It's crucial to still log the *actual* error for debugging purposes
         logging.error(f"Could not retrieve YouTube transcript for {video_id}: {e}", exc_info=True)
@@ -1290,62 +1351,6 @@ async def handle_youtube_url(update: Update, context: ContextTypes.DEFAULT_TYPE)
             parse_mode=ParseMode.MARKDOWN,
             disable_web_page_preview=True
         )
-        
-# @check_user_status
-# async def handle_youtube_url(update: Update, context: ContextTypes.DEFAULT_TYPE):
-#     """
-#     Handles messages containing YouTube URLs.
-#     """
-#     message = update.message
-#     url_entities = [entity for entity in message.entities if entity.type == 'url']
-#     if not url_entities:
-#         return 
-
-#     url = message.text[url_entities[0].offset : url_entities[0].offset + url_entities[0].length]
-
-#     video_id = get_yt_video_id(url)
-#     if not video_id:
-#         logging.info(f"Ignoring non-YouTube URL: {url}")
-#         return
-
-#     status_message = await message.reply_text(Texts.User.YOUTUBE_LOOKING_UP)
-
-#     try:
-#         transcript_list = ytt_api.list_transcripts(video_id)
-        
-#         buttons = []
-#         for transcript in transcript_list:
-#             lang_name = transcript.language
-#             lang_code = transcript.language_code
-#             is_generated = " (auto)" if transcript.is_generated else ""
-            
-#             button_text = f"{lang_name}{is_generated}"
-#             callback_data = f"yt:{video_id}:{lang_code}"
-            
-#             buttons.append([InlineKeyboardButton(button_text, callback_data=callback_data)])
-        
-#         if not buttons:
-#             await status_message.edit_text(Texts.Errors.YOUTUBE_NO_TRANSCRIPTS)
-#             return
-            
-#         reply_text = Texts.User.YOUTUBE_CHOOSE_TRANSCRIPT.format(
-#             title=f"Video ID: {video_id}", 
-#             duration="N/A" 
-#         )
-        
-#         await status_message.edit_text(
-#             reply_text,
-#             reply_markup=InlineKeyboardMarkup(buttons),
-#             parse_mode=ParseMode.HTML
-#         )
-
-#     except TranscriptsDisabled:
-#         await status_message.edit_text(Texts.Errors.YOUTUBE_TRANSCRIPTS_DISABLED)
-#     except NoTranscriptFound:
-#         await status_message.edit_text(Texts.Errors.YOUTUBE_NO_TRANSCRIPTS)
-#     except Exception as e:
-#         logging.error(f"Error fetching YouTube info for {video_id}: {e}", exc_info=True)
-#         await status_message.edit_text(Texts.Errors.YOUTUBE_FETCH_ERROR.format(error=e))
 
 
 async def youtube_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
