@@ -173,6 +173,7 @@ async def deliver_transcription_result(
     action1_estimated_minutes = (transcription_tokens + 500) / config.TEXT_TOKENS_TO_MINUTES_COEFF
     action2_estimated_minutes = (transcription_tokens + 2000) / config.TEXT_TOKENS_TO_MINUTES_COEFF
     action3_estimated_minutes = (transcription_tokens + 1000) / config.TEXT_TOKENS_TO_MINUTES_COEFF
+    TTS_estimated_minutes = (transcription_tokens * 8 / config.TEXT_TOKENS_TO_MINUTES_COEFF) * 4
     cost_minutes_estimated = transcription_tokens / config.TEXT_TOKENS_TO_MINUTES_COEFF
     logging.info(f"Transcription tokens: {transcription_tokens}, in minutes: {cost_minutes_estimated}")
   
@@ -239,7 +240,8 @@ async def deliver_transcription_result(
             reply_markup=get_action_keyboard(
                 action1_estimated_minutes,
                 action2_estimated_minutes,
-                action3_estimated_minutes
+                action3_estimated_minutes,
+                TTS_estimated_minutes
             )
         )
     else:
@@ -285,7 +287,8 @@ async def deliver_transcription_result(
                 reply_markup=get_action_keyboard(
                     action1_estimated_minutes,
                     action2_estimated_minutes,
-                    action3_estimated_minutes
+                    action3_estimated_minutes,
+                    TTS_estimated_minutes
                 ),
                 read_timeout=120,
                 write_timeout=120

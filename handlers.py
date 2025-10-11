@@ -1382,6 +1382,12 @@ async def youtube_callback_handler(update: Update, context: ContextTypes.DEFAULT
         await query.edit_message_text(f"✅ رونوشت زبان '{lang_code}' با موفقیت پردازش و ارسال شد.")
 
     except Exception as e:
+        # Keep logging the specific error for your own debugging purposes
         logging.error(f"Error processing YouTube callback for {video_id}: {e}", exc_info=True)
-        await query.edit_message_text(Texts.Errors.YOUTUBE_FETCH_ERROR.format(error=e))        
-
+        
+        # Instead of showing the error, show the unified workaround message
+        await query.edit_message_text(
+            text=Texts.Errors.YOUTUBE_TRANSCRIPT_UNAVAILABLE_WORKAROUND,
+            parse_mode=ParseMode.MARKDOWN,
+            disable_web_page_preview=True
+        )
