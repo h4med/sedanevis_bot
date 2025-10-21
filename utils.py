@@ -432,6 +432,24 @@ def get_action_keyboard(action1_estimated_minutes=0, action2_estimated_minutes=0
     ]    
     return InlineKeyboardMarkup(keyboard)
 
+def get_tts_keyboard(estimated_minutes=0):
+    """
+    Creates an InlineKeyboardMarkup with a single button for Text-to-Speech action.
+    """
+    def format_minutes(minutes):
+        if minutes >= 1:
+            return f"{minutes:.1f}" if minutes != int(minutes) else f"{int(minutes)}"
+        else:
+            return f"{minutes:.2f}"
+
+    keyboard = [[
+        InlineKeyboardButton(
+            f"{Texts.Keyboard.TEXT_TO_SPEECH} (هزینه ~ {format_minutes(estimated_minutes)}m)",
+            callback_data='tts_from_result' # Use a unique callback_data
+        )
+    ]]
+    return InlineKeyboardMarkup(keyboard)
+
 async def ensure_telethon_client():
     async with config.telethon_lock:
         if config.telethon_client is None or not config.telethon_client.is_connected():

@@ -50,7 +50,7 @@ from utils import (
     get_action_keyboard, ensure_telethon_client,
     create_word_document, extract_text_from_docx,
     preprocess_audio_sync, deliver_srt_file,
-    correct_srt_format
+    get_tts_keyboard 
 )
 
 admin_user_id = config.ADMIN_USER_ID
@@ -450,7 +450,7 @@ async def button_callback_handler(update: Update, context: ContextTypes.DEFAULT_
         logging.info(f"User {db_user.user_id} selected action: {action} ({button_text}), Text length: {len(text_to_process)} chars")
 
         # --- TTS LOGIC ---
-        if action == 'text_to_speech':
+        if action  in ['text_to_speech', 'tts_from_result']:
             # 1. Calculate cost based on the input text
             loop = asyncio.get_event_loop()
             input_tokens = await loop.run_in_executor(
@@ -549,6 +549,7 @@ async def button_callback_handler(update: Update, context: ContextTypes.DEFAULT_
             return
 
         total_tokens_consumed = result_dict.get("total_token_count", 0)
+        
         input_tc = result_dict.get("prompt_token_count", 0)
         output_tc = result_dict.get("candidates_token_count", 0)
         logging.info(f"Action-{action} done, for {db_user.user_id},Tokens Input: {input_tc}, Output: {output_tc}, Total: {total_tokens_consumed}")
@@ -561,6 +562,12 @@ async def button_callback_handler(update: Update, context: ContextTypes.DEFAULT_
         logging.info(f"user_lang: {user_lang}, Total tokens consumed for text process: {total_tokens_consumed}, Deducted {final_cost_minutes:.4f} minutes from user {db_user.user_id}. New balance: {db_user.credit_minutes:.2f}")
 
         result_text_md = result_dict.get("text", Texts.User.NO_RESPONSE_FROM_AI)
+
+        context.user_data['last_text'] = result_text_md
+        output_tokens_count = result_dict.get("candidates_token_count", 0)
+        tts_cost_for_result = (output_tokens_count * 8 / config.TEXT_TOKENS_TO_MINUTES_COEFF) * 4
+        tts_keyboard = get_tts_keyboard(tts_cost_for_result)
+
         formatted_result_html = convert_md_to_html(result_text_md, user_lang)
         header = Texts.User.ACTION_RESULT_HEADER.format(action_text=button_text)
         footer = Texts.User.ACTION_RESULT_FOOTER.format(
@@ -574,7 +581,11 @@ async def button_callback_handler(update: Update, context: ContextTypes.DEFAULT_
         await processing_message.delete() 
 
         if len(full_message) <= 4096:
-            await query.message.reply_text(full_message, parse_mode=ParseMode.HTML)
+            await query.message.reply_text(
+                full_message, 
+                parse_mode=ParseMode.HTML, 
+                reply_markup=tts_keyboard
+            )
         else:
 
             try:
@@ -588,7 +599,8 @@ async def button_callback_handler(update: Update, context: ContextTypes.DEFAULT_
                     document=document_buffer,
                     filename=report_filename,
                     caption=file_caption,
-                    parse_mode=ParseMode.HTML
+                    parse_mode=ParseMode.HTML,
+                    reply_markup=tts_keyboard
                 )
             except Exception as e:
                 logging.error(f"Failed to create or send Word file: {e}", exc_info=True)
