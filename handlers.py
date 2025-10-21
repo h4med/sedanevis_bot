@@ -461,9 +461,20 @@ async def button_callback_handler(update: Update, context: ContextTypes.DEFAULT_
                 "gemini-2.0-flash-lite"
             )
             # Cost is based on action3's formula, multiplied by 4
-            cost_minutes_est = (input_tokens * 8 / config.TEXT_TOKENS_TO_MINUTES_COEFF) * 4
+
             
-            logging.info(f"TTS Action: Input tokens: {input_tokens}, Estimated cost: {cost_minutes_est:.2f} minutes")
+            tts_len_estimate = input_tokens / config.TTS_FARSI_TOKEN_PER_MINUTE_EST
+            cost_minutes_est = (input_tokens * 8 / config.TEXT_TOKENS_TO_MINUTES_COEFF) * 4
+            logging.info(f"TTS Action: Input tokens: {input_tokens}, Estimated length: {tts_len_estimate:.2f} m, Estimated cost: {cost_minutes_est:.2f} m")
+
+            if tts_len_estimate > config.TTS_MAX_DURATION_MINUTE:
+                await processing_message.edit_text(
+                    Texts.Errors.TTS_TEXT_TOO_LONG.format(
+                        max_duration=config.TTS_MAX_DURATION_MINUTE,
+                        estimated_duration=tts_len_estimate
+                    )
+                )
+                return
 
             if cost_minutes_est > db_user.credit_minutes:
                 await processing_message.edit_text(
@@ -482,6 +493,7 @@ async def button_callback_handler(update: Update, context: ContextTypes.DEFAULT_
                 return
 
             total_tokens_consumed = result_dict.get("total_token_count", 0)
+            # total_tokens_consumed = result_dict.get("total_token_count", 0)
             final_cost_minutes = 4 * total_tokens_consumed / config.TEXT_TOKENS_TO_MINUTES_COEFF
 
             # 4. Deduct credit and log

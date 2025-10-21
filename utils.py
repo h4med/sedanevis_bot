@@ -91,8 +91,10 @@ def create_word_document(html_content: str, user_lang: str) -> io.BytesIO:
 
     style = document.styles['Normal']
     font = style.font
-    font.name = 'Tahoma' if user_lang == 'fa' else 'Calibri'
-    font.size = Pt(11)
+    # font.name = 'Tahoma' if user_lang == 'fa' else 'Calibri'
+    font.name = 'Tahoma'
+    # font.size = Pt(11)
+    font.size = Pt(16)
 
     p_format = style.paragraph_format
     p_format.space_before = Pt(0)
