@@ -944,12 +944,18 @@ async def approval_callback_handler(update: Update, context: ContextTypes.DEFAUL
 
 @check_user_status
 async def credit_command_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """
-    Handles the /credit command, showing the user their remaining credits.
-    """
+    """Handles the /credit command, showing credit status and recharge instructions."""
     db_user: User = context.user_data['db_user']
+
+    reply_text = Texts.User.CREDIT_STATUS.format(
+        credit=db_user.credit_minutes,
+        user_id=db_user.user_id
+    )
     
-    reply_text = Texts.User.CREDIT_STATUS.format(credit=db_user.credit_minutes)   
+    db = SessionLocal()
+    log_activity(db, user_id=db_user.user_id, action="credit_view", credit_change=0, details="credit_command_handler")
+    db.close() 
+
     await update.message.reply_text(reply_text, parse_mode=ParseMode.HTML)
 
 
@@ -1088,6 +1094,7 @@ async def list_users_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
             user_line = Texts.Admin.LIST_USERS_ITEM.format(
                 first_name=html.escape(user.first_name),
                 user_id=user.user_id,
+                user_name=user.username or 'N/A',
                 status=user.status,
                 credit=user.credit_minutes
             )            
