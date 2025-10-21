@@ -8,6 +8,7 @@ import asyncio
 import jdatetime
 import pytz
 import math
+from sqlalchemy import desc
 
 from functools import wraps
 from pydub import AudioSegment
@@ -1251,49 +1252,146 @@ async def set_status_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 @admin_only
 async def user_logs_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Displays recent activity logs for a specific user."""
+    """
+    Displays recent activity logs.
+    - If user_id is provided, shows logs for that user.
+    - If no user_id, shows logs from all users.
+    - An optional 'limit' can be provided (defaults to 20).
+    """
     args = context.args
-    if len(args) != 1:
+    target_user_id = None
+    limit = 20  # Default limit
+
+    # --- Argument Parsing Logic ---
+    if len(args) > 2:
         await update.message.reply_text(Texts.Errors.USAGE_USER_LOGS, parse_mode=ParseMode.HTML)
         return
 
-    try:
-        target_user_id = int(args[0])
-    except ValueError:
-        await update.message.reply_text(Texts.Errors.INVALID_USER_ID)
+    # Case 1: One argument provided (user_id)
+    if len(args) == 1:
+        try:
+            target_user_id = int(args[0])
+        except ValueError:
+            await update.message.reply_text(Texts.Errors.INVALID_USER_ID)
+            return
+
+    # Case 2: Two arguments provided (user_id, limit)
+    if len(args) == 2:
+        try:
+            target_user_id = int(args[0])
+            limit = int(args[1])
+        except ValueError:
+            await update.message.reply_text("Invalid arguments. User ID and limit must be numbers.")
+            return
+
+    # Sanity check for the limit
+    if not 0 < limit <= 100:
+        await update.message.reply_text("Log limit must be a number between 1 and 100.")
         return
 
+    # --- Database Query and Response ---
     db = SessionLocal()
     try:
-        user = db.query(User).filter(User.user_id == target_user_id).first()
-        if not user:
-            await update.message.reply_text(f"No user found with ID <code>{target_user_id}</code>.", parse_mode=ParseMode.HTML)
-            return
+        # Build the base query
+        query = db.query(ActivityLog)
 
-        logs = db.query(ActivityLog).filter(ActivityLog.user_id == target_user_id).order_by(ActivityLog.timestamp.desc()).limit(20).all()
+        # If a specific user is requested, filter the query
+        if target_user_id:
+            user = db.query(User).filter(User.user_id == target_user_id).first()
+            if not user:
+                await update.message.reply_text(f"No user found with ID <code>{target_user_id}</code>.", parse_mode=ParseMode.HTML)
+                return
+            query = query.filter(ActivityLog.user_id == target_user_id)
+            header = Texts.Admin.USER_LOGS_HEADER.format(first_name=html.escape(user.first_name), user_id=user.user_id)
+        else:
+            header = f"<b>Last {limit} activities from all users:</b>\n"
+
+        # Apply ordering and limit to the final query
+        logs = query.order_by(desc(ActivityLog.timestamp)).limit(limit).all()
 
         if not logs:
-            await update.message.reply_text(Texts.Admin.NO_LOGS_FOUND.format(user_id=target_user_id), parse_mode=ParseMode.HTML)
+            if target_user_id:
+                await update.message.reply_text(Texts.Admin.NO_LOGS_FOUND.format(user_id=target_user_id), parse_mode=ParseMode.HTML)
+            else:
+                await update.message.reply_text("No activity logs found in the database.")
             return
         
-        message_parts = [
-            Texts.Admin.USER_LOGS_HEADER.format(
-                first_name=html.escape(user.first_name), 
-                user_id=user.user_id
-            )
-        ]
+        message_parts = [header]
         for log in logs:
+            action_text = log.action_type
+            # If viewing all logs, prepend the user's name to the action
+            if not target_user_id:
+                log_user = db.query(User.first_name).filter(User.user_id == log.user_id).first()
+                user_name = log_user.first_name if log_user else f"ID:{log.user_id}"
+                action_text = f"<b>{html.escape(user_name)}</b>: {log.action_type}"
+            
             log_line = Texts.Admin.USER_LOGS_ITEM.format(
-                timestamp=log.timestamp.strftime('%Y-%m-%d %H:%M'),
-                action=log.action_type,
+                timestamp=log.timestamp.strftime('%y-%m-%d %H:%M'),
+                action=action_text,
                 change=log.credit_change,
                 details=html.escape(log.details or 'N/A')
             )
             message_parts.append(log_line)
-            
-        full_message = "".join(message_parts)
-        await update.message.reply_text(full_message, parse_mode=ParseMode.HTML)
         
+        await update.message.reply_text("".join(message_parts), parse_mode=ParseMode.HTML)
+
+    finally:
+        db.close()
+
+@admin_only
+async def delete_user_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Permanently deletes a user and all associated data from the database.
+    Usage: /delete_user <user_id>
+    """
+    # 1. Parse and validate input
+    if len(context.args) != 1:
+        # You might want to add this to your Texts.py: USAGE_DELETE_USER = "⚠️ Usage: <code>/delete_user &lt;user_id&gt;</code>"
+        await update.message.reply_text("⚠️ Usage: <code>/delete_user &lt;user_id&gt;</code>", parse_mode=ParseMode.HTML)
+        return
+
+    try:
+        target_user_id = int(context.args[0])
+    except ValueError:
+        await update.message.reply_text(Texts.Errors.INVALID_USER_ID)
+        return
+
+    # 2. Prevent admin from deleting themselves
+    if target_user_id == update.effective_user.id:
+        await update.message.reply_text("⛔️ You cannot delete your own admin account via command.")
+        return
+
+    # 3. Database operation
+    db = SessionLocal()
+    try:
+        user = db.query(User).filter(User.user_id == target_user_id).first()
+        if not user:
+            await update.message.reply_text(f"❌ No user found with ID <code>{target_user_id}</code>.", parse_mode=ParseMode.HTML)
+            return
+
+        # Capture name for confirmation message before deletion
+        user_name = html.escape(user.first_name)
+        user_username = f"(@{user.username})" if user.username else ""
+
+        # Delete the user. SQLAlchemy cascade rules will delete logs, sessions, etc.
+        db.delete(user)
+        db.commit()
+
+        # Log to server console (since DB logs for this user are now gone)
+        logging.info(f"ADMIN ACTION: Admin {update.effective_user.id} deleted user {target_user_id} ({user_name}).")
+
+        # Confirm to admin
+        await update.message.reply_text(
+            f"✅ User <b>{user_name}</b> {user_username} (<code>{target_user_id}</code>) "
+            f"and all associated data have been <b>permanently deleted</b>.\n\n"
+            f"They will need to send /start to request access again.",
+            parse_mode=ParseMode.HTML
+        )
+
+    except Exception as e:
+        db.rollback()
+        logging.error(f"Error deleting user {target_user_id}: {e}")
+        await update.message.reply_text("❌ An internal error occurred while trying to delete the user.")
     finally:
         db.close()
 

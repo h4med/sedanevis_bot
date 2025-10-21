@@ -32,6 +32,7 @@ from handlers import (
     youtube_callback_handler,   
     handle_video_file,
     handle_video_callback,    
+    delete_user_command
 )
 from database import create_db_and_tables
 from texts import Texts  
@@ -57,7 +58,8 @@ async def post_init(application: Application):
         BotCommand("/user_info", Texts.BotCommands.USER_INFO),
         BotCommand("/add_credit", Texts.BotCommands.ADD_CREDIT),
         BotCommand("/set_status", Texts.BotCommands.SET_STATUS),
-        BotCommand("/user_logs", Texts.BotCommands.USER_LOGS), # <-- ADD NEW COMMAND        
+        BotCommand("/user_logs", Texts.BotCommands.USER_LOGS),
+        BotCommand("/delete_user", Texts.BotCommands.DEL_USER),
     ]
     # Set the admin commands only for the admin's chat
     await application.bot.set_my_commands(
@@ -99,6 +101,7 @@ def main() -> None:
     application.add_handler(CommandHandler('add_credit', add_credit_command)) 
     application.add_handler(CommandHandler('set_status', set_status_command)) 
     application.add_handler(CommandHandler('user_logs', user_logs_command)) 
+    application.add_handler(CommandHandler("delete_user", delete_user_command))
 
     application.add_handler(MessageHandler(
         filters.VOICE | filters.AUDIO, 
@@ -128,7 +131,6 @@ def main() -> None:
 
     logging.info("Starting bot polling...")
     application.run_polling(allowed_updates=Update.ALL_TYPES, drop_pending_updates=True)
-
 
 if __name__ == '__main__':
     main()
