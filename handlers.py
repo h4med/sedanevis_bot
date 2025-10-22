@@ -3,6 +3,7 @@ import logging
 import os
 import traceback
 import html
+from html import escape
 import json
 import asyncio
 import jdatetime
@@ -1114,12 +1115,17 @@ async def list_users_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
             await update.message.reply_text("No users found in the database.")
             return
             
-        message_parts = ["<b>👥 User List</b>\n\n"]
+        message_parts = [Texts.Admin.LIST_USERS_HEADER]
         for user in users:
+            user_profile_link = (
+                f"@{escape(user.username)}" if user.username 
+                # No username case (clickable name link)
+                else f'<a href="tg://user?id={user.user_id}">{escape(user.first_name)}</a>'
+            )            
             user_line = Texts.Admin.LIST_USERS_ITEM.format(
-                first_name=html.escape(user.first_name),
+                first_name=escape(user.first_name),
                 user_id=user.user_id,
-                user_name=user.username or 'N/A',
+                user_name=user_profile_link,
                 status=user.status,
                 credit=user.credit_minutes
             )            

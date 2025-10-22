@@ -188,10 +188,10 @@ class Texts:
             "<code>/user_logs &lt;user_id&gt;</code>\nShow recent activity for a user."            
         )
         
-        LIST_USERS_HEADER = "<b>👥 User List</b>\n\n"
+        LIST_USERS_HEADER = "<b>👥 Users List</b>\n\n"
         LIST_USERS_ITEM = (
             "<b>{first_name}</b> (<code>{user_id}</code>)\n"
-            "Username: <b>{user_name}</b>\n"
+            "Profile: <b>{user_name}</b>\n"
             "Status: {status} | Credit: {credit:.1f} \n"
             "--------------------\n"
         )

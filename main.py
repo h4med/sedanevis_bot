@@ -53,7 +53,7 @@ async def post_init(application: Application):
 
     # Define a more extensive list of commands for the admin
     admin_commands = user_commands + [
-        BotCommand("/admin_help", Texts.BotCommands.ADMIN_HELP),
+        # BotCommand("/admin_help", Texts.BotCommands.ADMIN_HELP),
         BotCommand("/list_users", Texts.BotCommands.LIST_USERS),
         BotCommand("/user_info", Texts.BotCommands.USER_INFO),
         BotCommand("/add_credit", Texts.BotCommands.ADD_CREDIT),
