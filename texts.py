@@ -118,12 +118,6 @@ class Texts:
         )
         APPROVAL_REJECTED = "متاسفانه درخواست شما برای استفاده از ربات رد شد."
 
-        # CREDIT_STATUS = (
-        #     "📊 <b>وضعیت اعتبار شما</b>\n\n"
-        #     "⏳ <b>اعتبار باقیمانده:</b> {credit:.1f} دقیقه\n\n"
-        #     "برای شارژ اعتبار، لطفا با ادمین در ارتباط باشید: @sedanevis_admin\n\n@SedaNevis_Bot"
-        # )
-
         CREDIT_STATUS = (
             "📊 <b>وضعیت اعتبار شما</b>\n\n"
             "⏳ <b>اعتبار باقیمانده:</b> {credit:.1f} دقیقه\n\n"
@@ -148,9 +142,9 @@ class Texts:
         LANG_EN_NAME = "English (en)"
 
         YOUTUBE_LOOKING_UP = "در حال بررسی لینک یوتیوب..."
+        YOUTUBE_TEMP_MSG = "در حال دریافت رونوشت..."
         YOUTUBE_CHOOSE_TRANSCRIPT = (
-            "<b>{title}</b>\n"
-            "<i>مدت زمان: {duration}</i>\n\n"
+            "✨ دریافت رونوشت از یوتیوب بدون هزینه است.\n\n"
             "لطفا زبان رونوشت مورد نظر خود را انتخاب کنید:"
         )
         TRANSCRIPTION_LONG_FILE_CAPTION = (
@@ -247,18 +241,20 @@ class Texts:
         INVALID_USER_ID = "Invalid User ID. It must be a number."
         INVALID_ARGS_ADD_CREDIT = "Invalid arguments. User ID, minutes, and tokens must be numbers."
         
-        USAGE_USER_INFO = "Usage: <code>/user_info &lt;user_id&gt;</code>"
-        USAGE_ADD_CREDIT = "Usage: <code>/add_credit &lt;user_id&gt; &lt;minutes&gt;</code>"
-        USAGE_USER_LOGS = "Usage: <code>/user_logs &lt;user_id&gt;</code>" # New
+        USAGE_USER_INFO = "⚠️ Usage: <code>/user_info &lt;user_id&gt;</code>"
+        USAGE_ADD_CREDIT = "⚠️ Usage: <code>/add_credit &lt;user_id&gt; &lt;minutes&gt;</code>"
+        USAGE_USER_LOGS = "⚠️ Usage: <code>/user_logs &lt;user_id&gt;</code>"
         USAGE_SET_STATUS = (
-            "Usage: <code>/set_status &lt;user_id&gt; &lt;status&gt;</code>\n"
+            "⚠️ Usage: <code>/set_status &lt;user_id&gt; &lt;status&gt;</code>\n"
             "Valid statuses are: {valid_statuses}"
         )
-        
+        USAGE_DELETE_USER = "⚠️ Usage: <code>/delete_user &lt;user_id&gt;</code>"
+
         EXCEPTION_REPORT_HEADER = "An exception was raised while handling an update\n"
         YOUTUBE_INVALID_URL = "لینک یوتیوب نامعتبر است. لطفا یک لینک معتبر ارسال کنید."
         YOUTUBE_TRANSCRIPTS_DISABLED = "متاسفانه صاحب این ویدیو امکان دسترسی به رونوشت را غیرفعال کرده است."
         YOUTUBE_NO_TRANSCRIPTS = "متاسفانه هیچ رونوشتی (دستی یا خودکار) برای این ویدیو یافت نشد."
+        YOUTUBE_TRANSCRIPTS_ERR_TRYAGAIN = "متاسفانه ارتباط با یوتیوب بیش از حد طول کشید و پاسخی دریافت نشد. لطفاً چند دقیقه دیگر دوباره امتحان کنید."
         YOUTUBE_FETCH_ERROR = "خطایی در دریافت اطلاعات از یوتیوب رخ داد: {error}"
         YOUTUBE_TRANSCRIPT_UNAVAILABLE_WORKAROUND = (
             "متاسفانه امکان دریافت مستقیم رونویس از این ویدیو وجود ندارد.\n"

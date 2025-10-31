@@ -6,6 +6,7 @@ import html
 from html import escape
 import json
 import asyncio
+from asyncio import TimeoutError as AsyncioTimeoutError
 import jdatetime
 import pytz
 import math
@@ -1119,7 +1120,6 @@ async def list_users_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
         for user in users:
             user_profile_link = (
                 f"@{escape(user.username)}" if user.username 
-                # No username case (clickable name link)
                 else f'<a href="tg://user?id={user.user_id}">{escape(user.first_name)}</a>'
             )            
             user_line = Texts.Admin.LIST_USERS_ITEM.format(
@@ -1257,7 +1257,7 @@ async def set_status_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
         )
 
         await update.message.reply_text(
-            Texts.Admin.SET_STATUS_SUCCESS.format( # Uses updated text
+            Texts.Admin.SET_STATUS_SUCCESS.format(
                 first_name=html.escape(user.first_name),
                 user_id=user.user_id,
                 new_status=new_status
@@ -1278,14 +1278,12 @@ async def user_logs_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     args = context.args
     target_user_id = None
-    limit = 20  # Default limit
+    limit = 25
 
-    # --- Argument Parsing Logic ---
     if len(args) > 2:
         await update.message.reply_text(Texts.Errors.USAGE_USER_LOGS, parse_mode=ParseMode.HTML)
         return
 
-    # Case 1: One argument provided (user_id)
     if len(args) == 1:
         try:
             target_user_id = int(args[0])
@@ -1293,7 +1291,6 @@ async def user_logs_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text(Texts.Errors.INVALID_USER_ID)
             return
 
-    # Case 2: Two arguments provided (user_id, limit)
     if len(args) == 2:
         try:
             target_user_id = int(args[0])
@@ -1302,18 +1299,14 @@ async def user_logs_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("Invalid arguments. User ID and limit must be numbers.")
             return
 
-    # Sanity check for the limit
     if not 0 < limit <= 100:
         await update.message.reply_text("Log limit must be a number between 1 and 100.")
         return
 
-    # --- Database Query and Response ---
     db = SessionLocal()
     try:
-        # Build the base query
         query = db.query(ActivityLog)
 
-        # If a specific user is requested, filter the query
         if target_user_id:
             user = db.query(User).filter(User.user_id == target_user_id).first()
             if not user:
@@ -1324,7 +1317,6 @@ async def user_logs_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             header = f"<b>Last {limit} activities from all users:</b>\n"
 
-        # Apply ordering and limit to the final query
         logs = query.order_by(desc(ActivityLog.timestamp)).limit(limit).all()
 
         if not logs:
@@ -1337,7 +1329,6 @@ async def user_logs_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         message_parts = [header]
         for log in logs:
             action_text = log.action_type
-            # If viewing all logs, prepend the user's name to the action
             if not target_user_id:
                 log_user = db.query(User.first_name).filter(User.user_id == log.user_id).first()
                 user_name = log_user.first_name if log_user else f"ID:{log.user_id}"
@@ -1362,10 +1353,8 @@ async def delete_user_command(update: Update, context: ContextTypes.DEFAULT_TYPE
     Permanently deletes a user and all associated data from the database.
     Usage: /delete_user <user_id>
     """
-    # 1. Parse and validate input
     if len(context.args) != 1:
-        # You might want to add this to your Texts.py: USAGE_DELETE_USER = "⚠️ Usage: <code>/delete_user &lt;user_id&gt;</code>"
-        await update.message.reply_text("⚠️ Usage: <code>/delete_user &lt;user_id&gt;</code>", parse_mode=ParseMode.HTML)
+        await update.message.reply_text(Texts.Errors.USAGE_DELETE_USER, parse_mode=ParseMode.HTML)
         return
 
     try:
@@ -1374,12 +1363,10 @@ async def delete_user_command(update: Update, context: ContextTypes.DEFAULT_TYPE
         await update.message.reply_text(Texts.Errors.INVALID_USER_ID)
         return
 
-    # 2. Prevent admin from deleting themselves
     if target_user_id == update.effective_user.id:
         await update.message.reply_text("⛔️ You cannot delete your own admin account via command.")
         return
 
-    # 3. Database operation
     db = SessionLocal()
     try:
         user = db.query(User).filter(User.user_id == target_user_id).first()
@@ -1387,18 +1374,14 @@ async def delete_user_command(update: Update, context: ContextTypes.DEFAULT_TYPE
             await update.message.reply_text(f"❌ No user found with ID <code>{target_user_id}</code>.", parse_mode=ParseMode.HTML)
             return
 
-        # Capture name for confirmation message before deletion
         user_name = html.escape(user.first_name)
         user_username = f"(@{user.username})" if user.username else ""
 
-        # Delete the user. SQLAlchemy cascade rules will delete logs, sessions, etc.
         db.delete(user)
         db.commit()
 
-        # Log to server console (since DB logs for this user are now gone)
         logging.info(f"ADMIN ACTION: Admin {update.effective_user.id} deleted user {target_user_id} ({user_name}).")
 
-        # Confirm to admin
         await update.message.reply_text(
             f"✅ User <b>{user_name}</b> {user_username} (<code>{target_user_id}</code>) "
             f"and all associated data have been <b>permanently deleted</b>.\n\n"
@@ -1446,10 +1429,18 @@ async def handle_youtube_url(update: Update, context: ContextTypes.DEFAULT_TYPE)
         return
 
     status_message = await message.reply_text(Texts.User.YOUTUBE_LOOKING_UP)
+    loop = asyncio.get_event_loop()
 
     try:
-        transcript_list = ytt_api.list_transcripts(video_id)
-        
+        transcript_list = await asyncio.wait_for(
+            loop.run_in_executor(
+                None,
+                ytt_api.list_transcripts,
+                video_id
+            ),
+            timeout=15.0 
+        )
+
         buttons = []
         for transcript in transcript_list:
             lang_name = transcript.language
@@ -1462,38 +1453,33 @@ async def handle_youtube_url(update: Update, context: ContextTypes.DEFAULT_TYPE)
             buttons.append([InlineKeyboardButton(button_text, callback_data=callback_data)])
         
         if not buttons:
-            # This case will be caught by NoTranscriptFound, but we keep it for safety
             raise NoTranscriptFound(video_id)
-            
-        reply_text = Texts.User.YOUTUBE_CHOOSE_TRANSCRIPT.format(
-            title=f"Video ID: {video_id}", 
-            duration="N/A" 
-        )
-        
+                    
         await status_message.edit_text(
-            reply_text,
+            Texts.User.YOUTUBE_CHOOSE_TRANSCRIPT,
             reply_markup=InlineKeyboardMarkup(buttons),
             parse_mode=ParseMode.HTML
         )
 
+    except AsyncioTimeoutError:
+        logging.warning(f"YouTube API call timed out for video_id: {video_id}")
+        await status_message.edit_text(Texts.Errors.YOUTUBE_TRANSCRIPTS_ERR_TRYAGAIN)
+
     except (TranscriptsDisabled, NoTranscriptFound, Exception) as e:
-        # It's crucial to still log the *actual* error for debugging purposes
         logging.error(f"Could not retrieve YouTube transcript for {video_id}: {e}", exc_info=True)
         
-        # Send the unified workaround message to the user
         await status_message.edit_text(
             text=Texts.Errors.YOUTUBE_TRANSCRIPT_UNAVAILABLE_WORKAROUND,
             parse_mode=ParseMode.MARKDOWN,
             disable_web_page_preview=True
         )
 
-
 async def youtube_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     Handles the button press after a user chooses a transcript language.
     """
     query = update.callback_query
-    await query.answer("در حال دریافت رونوشت...")
+    await query.answer(Texts.User.YOUTUBE_TEMP_MSG)
 
     try:
         _, video_id, lang_code = query.data.split(':')
@@ -1502,9 +1488,10 @@ async def youtube_callback_handler(update: Update, context: ContextTypes.DEFAULT
         return
 
     try:
-        transcript = ytt_api.get_transcript(video_id, languages=[lang_code])
-
-        transcript_text = " ".join([segment['text'] for segment in transcript])
+        transcript_list = ytt_api.list_transcripts(video_id)
+        transcript_object = transcript_list.find_transcript([lang_code])
+        transcript_data = transcript_object.fetch()
+        transcript_text = " ".join([segment.text for segment in transcript_data])
         
         source_info = {
             'type': 'youtube',
@@ -1512,15 +1499,13 @@ async def youtube_callback_handler(update: Update, context: ContextTypes.DEFAULT
             'id': video_id,
             'lang_code': lang_code
         }
+        
+        await query.delete_message()
         await deliver_transcription_result(update, context, transcript_text, source_info)
 
-        await query.edit_message_text(f"✅ رونوشت زبان '{lang_code}' با موفقیت پردازش و ارسال شد.")
-
     except Exception as e:
-        # Keep logging the specific error for your own debugging purposes
         logging.error(f"Error processing YouTube callback for {video_id}: {e}", exc_info=True)
-        
-        # Instead of showing the error, show the unified workaround message
+
         await query.edit_message_text(
             text=Texts.Errors.YOUTUBE_TRANSCRIPT_UNAVAILABLE_WORKAROUND,
             parse_mode=ParseMode.MARKDOWN,

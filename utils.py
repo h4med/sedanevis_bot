@@ -201,19 +201,19 @@ async def deliver_transcription_result(
             f"<b>مدت:</b> {cost_minutes:.1f} دقیقه\n"
         )
         if source_info['type'] == 'media':
-            info_section += f"<b>اعتبار مصرف شده:</b> {cost_minutes:.2f} دقیقه\n"
-            info_section += f"<b>اعتبار باقی‌مانده:</b> {remaining_credit:.2f} دقیقه\n"
+            info_section += f"<b>اعتبار مصرف شده:</b> {cost_minutes:.1f} دقیقه\n"
+            info_section += f"<b>اعتبار باقی‌مانده:</b> {remaining_credit:.1f} دقیقه\n"
         elif source_info['type'] == 'youtube':
-            info_section += f"<b>اعتبار فعلی:</b> {remaining_credit:.2f} دقیقه\n"
+            info_section = f"(رونوشت بدون کسر از اعتبار دریافت شد)\n<b>اعتبار فعلی:</b> {remaining_credit:.1f} دقیقه\n"
     else:
         info_section = (
             f"<b>Duration:</b> {cost_minutes:.1f} minutes\n"
         )
         if source_info['type'] == 'media':
-            info_section += f"<b>Consumed:</b> {cost_minutes:.2f} minutes\n"
-            info_section += f"<b>Remaining Credit:</b> {remaining_credit:.2f} minutes\n"
+            info_section += f"<b>Consumed:</b> {cost_minutes:.1f} minutes\n"
+            info_section += f"<b>Remaining Credit:</b> {remaining_credit:.1f} minutes\n"
         elif source_info['type'] == 'youtube':
-            info_section += f"<b>Current Credit:</b> {remaining_credit:.2f} minutes\n"
+            info_section = f"(No charge for Youtube)\n<b>Current Credit:</b> {remaining_credit:.1f} minutes\n"
   
     # Decide delivery method based on length
     if len(transcript_text) < (TELEGRAM_MESSAGE_LIMIT - 500):
