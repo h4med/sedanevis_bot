@@ -1433,25 +1433,20 @@ async def handle_youtube_url(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     try:
         transcript_list = await asyncio.wait_for(
-            loop.run_in_executor(
-                None,
-                ytt_api.list_transcripts,
-                video_id
-            ),
-            timeout=15.0 
+            loop.run_in_executor(None, ytt_api.list_transcripts, video_id),
+            timeout=20.0 
         )
 
+        logging.info(f"Retrieved transcript list for video_id: {video_id}")
+
         buttons = []
-        for transcript in transcript_list:
-            lang_name = transcript.language
-            lang_code = transcript.language_code
-            is_generated = " (auto)" if transcript.is_generated else ""
-            
-            button_text = f"{lang_name}{is_generated}"
-            callback_data = f"yt:{video_id}:{lang_code}"
-            
-            buttons.append([InlineKeyboardButton(button_text, callback_data=callback_data)])
         
+        for transcript in transcript_list:
+            buttons.append([InlineKeyboardButton(
+                f"{transcript.language}{' (auto)' if transcript.is_generated else ''}",
+                callback_data=f"yt:{video_id}:{transcript.language_code}"
+            )])
+
         if not buttons:
             raise NoTranscriptFound(video_id)
                     
@@ -1466,13 +1461,21 @@ async def handle_youtube_url(update: Update, context: ContextTypes.DEFAULT_TYPE)
         await status_message.edit_text(Texts.Errors.YOUTUBE_TRANSCRIPTS_ERR_TRYAGAIN)
 
     except (TranscriptsDisabled, NoTranscriptFound, Exception) as e:
-        logging.error(f"Could not retrieve YouTube transcript for {video_id}: {e}", exc_info=True)
+        logging.warning(f"No transcripts found for video {video_id}. Reason: {e}")
         
         await status_message.edit_text(
             text=Texts.Errors.YOUTUBE_TRANSCRIPT_UNAVAILABLE_WORKAROUND,
-            parse_mode=ParseMode.MARKDOWN,
+            parse_mode=ParseMode.HTML,
             disable_web_page_preview=True
         )
+    except Exception as e:
+        # For truly UNEXPECTED errors, log the full traceback.
+        logging.error(f"An unexpected error occurred for video {video_id}: {e}", exc_info=True)
+        await status_message.edit_text(
+            text=Texts.Errors.YOUTUBE_TRANSCRIPT_UNAVAILABLE_WORKAROUND,
+            parse_mode=ParseMode.HTML,
+            disable_web_page_preview=True
+        )        
 
 async def youtube_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
@@ -1486,11 +1489,19 @@ async def youtube_callback_handler(update: Update, context: ContextTypes.DEFAULT
     except (ValueError, IndexError):
         await query.edit_message_text(Texts.Errors.INVALID_CALLBACK_DATA)
         return
+    
+    loop = asyncio.get_event_loop()
 
     try:
         transcript_list = ytt_api.list_transcripts(video_id)
         transcript_object = transcript_list.find_transcript([lang_code])
-        transcript_data = transcript_object.fetch()
+
+        # transcript_data = transcript_object.fetch()
+        transcript_data = await asyncio.wait_for(
+            loop.run_in_executor(None, transcript_object.fetch),
+            timeout=20.0
+        )
+
         transcript_text = " ".join([segment.text for segment in transcript_data])
         
         source_info = {
@@ -1503,11 +1514,17 @@ async def youtube_callback_handler(update: Update, context: ContextTypes.DEFAULT
         await query.delete_message()
         await deliver_transcription_result(update, context, transcript_text, source_info)
 
+    except AsyncioTimeoutError:
+        logging.warning(f"YouTube .fetch() call timed out for {video_id}:{lang_code}")
+        await query.edit_message_text(
+            "متاسفانه هنگام دانلود رونوشت، ارتباط با یوتیوب قطع شد. لطفاً دوباره تلاش کنید."
+        )
+
     except Exception as e:
         logging.error(f"Error processing YouTube callback for {video_id}: {e}", exc_info=True)
 
         await query.edit_message_text(
             text=Texts.Errors.YOUTUBE_TRANSCRIPT_UNAVAILABLE_WORKAROUND,
-            parse_mode=ParseMode.MARKDOWN,
+            parse_mode=ParseMode.HTML,
             disable_web_page_preview=True
         )
