@@ -11,7 +11,8 @@ services:
       
     volumes:
       - bot_persistent_data:/home/appuser/app/persistent_data
-      - bot_downloads:/home/appuser/app/downloads      
+      - bot_downloads:/home/appuser/app/downloads
+      - ./backups:/home/appuser/app/persistent_data/backups
       
     deploy:
       resources:

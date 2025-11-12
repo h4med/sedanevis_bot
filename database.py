@@ -1,6 +1,7 @@
 # database.py
 
 import datetime
+from datetime import UTC
 from sqlalchemy import (
     create_engine,
     Column,
@@ -11,6 +12,7 @@ from sqlalchemy import (
     BigInteger,
     ForeignKey,
     Text,
+    func,
 )
 from sqlalchemy.orm import sessionmaker, declarative_base, relationship
 
@@ -37,7 +39,8 @@ class User(Base):
     
     credit_minutes = Column(Float, nullable=False, default=0.0)
     preferred_language = Column(String, nullable=False, default='fa')
-    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    # created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.datetime.now(UTC))
 
     # Relationship to ActivityLog
     logs = relationship("ActivityLog", back_populates="user", cascade="all, delete-orphan")
@@ -71,6 +74,21 @@ class ActivityLog(Base):
             f"change={self.credit_change})>"
         )
 
+class BatchJob(Base):
+    __tablename__ = "batch_jobs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    job_name = Column(String, unique=True, index=True, nullable=False)
+    user_id = Column(BigInteger, nullable=False)
+    chat_id = Column(BigInteger, nullable=False)
+    original_message_id = Column(Integer, nullable=False)
+    status = Column(String, default="PENDING", nullable=False)  # PENDING, SUCCEEDED, FAILED
+    cost_minutes = Column(Float, nullable=False)
+    original_filename = Column(String, nullable=True)
+    # created_at = Column(DateTime(timezone=True), server_default=func.now())
+    created_at = Column(DateTime, default=lambda: datetime.datetime.now(UTC))
+    
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
 # --- Database Initialization ---
 def create_db_and_tables():
